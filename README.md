@@ -18,7 +18,7 @@ MXControl 使用 Swift 6、SwiftUI、IOKit 和 CoreBluetooth 构建，无第三�
 
 ### 鼠标功能
 
-当前主要针对 **MX Master 3S**。
+当前主要针对 **MX Master 3** 和 **MX Master 3S**。
 
 #### 滚轮与指针
 
@@ -135,6 +135,7 @@ Easy-Switch 在当前版本中只展示主机信息，不提供切换按钮。
 
 | 设备 | USB 接收器 | BLE HID++ | CoreBluetooth 信息 |
 |---|---:|---:|---:|
+| MX Master 3 | 已测试 | 已测试 | 电量与设备信息 |
 | MX Master 3S | 已测试 | 已测试 | 电量与设备信息 |
 | MX Keys Mini | 已测试 | 已测试 | 电量与设备信息 |
 
@@ -142,7 +143,7 @@ Easy-Switch 在当前版本中只展示主机信息，不提供切换按钮。
 
 ### 当前限制
 
-- 只对 MX Master 3S 和 MX Keys Mini 做过完整验证
+- 只对 MX Master 3、MX Master 3S 和 MX Keys Mini 做过完整验证
 - CoreBluetooth 本身不能在 macOS 15+ 上作为 HID++ 命令通道
 - Logi Options+ 或其他进程独占 BLE HID 接口时，完整控制可能暂时不可用
 - 拇指手势动作不可自定义，只能调节点击时限和拖动阈值
@@ -197,7 +198,7 @@ This fork focuses on a native Chinese interface, HID++ high-resolution smooth sc
 
 ### Mouse features
 
-The primary tested mouse is the **MX Master 3S**.
+The primary tested mice are the **MX Master 3** and **MX Master 3S**.
 
 #### Scrolling and pointer
 
@@ -314,6 +315,7 @@ Additional connection behavior:
 
 | Device | USB receiver | BLE HID++ | CoreBluetooth information |
 |---|---:|---:|---:|
+| MX Master 3 | Tested | Tested | Battery and device information |
 | MX Master 3S | Tested | Tested | Battery and device information |
 | MX Keys Mini | Tested | Tested | Battery and device information |
 
@@ -321,7 +323,7 @@ Other Logitech HID++ 2.0 devices may be discovered, but available controls depen
 
 ### Current limitations
 
-- Full validation currently covers only the MX Master 3S and MX Keys Mini
+- Full validation currently covers only the MX Master 3, MX Master 3S, and MX Keys Mini
 - CoreBluetooth is not an HID++ command channel on macOS 15+
 - Full BLE control may be temporarily unavailable while Logi Options+ or another process owns the HID interface
 - Thumb gesture actions are fixed; only timing and drag threshold are configurable

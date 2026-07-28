@@ -160,21 +160,78 @@ Easy-Switch 在当前版本中只展示主机信息，不提供切换按钮。
 - Xcode Command Line Tools
 - Logitech HID++ 2.0 兼容设备
 
+首次构建前安装并检查工具：
+
+```bash
+xcode-select --install
+swift --version
+git --version
+```
+
+获取源码并运行测试：
+
 ```bash
 git clone https://github.com/JokerNg/MXControl.git
 cd MXControl
 
-# 直接运行
-make run
-
-# 构建 DMG，默认使用 ad-hoc 签名
-make dmg
+swift test
 ```
 
-如需使用自己的签名证书：
+开发运行：
 
 ```bash
+# 通过 SwiftPM 编译并在前台运行
+make run
+
+# 或先构建 Debug 版本，再运行 .build/debug/MXControl
+make debug
+```
+
+构建 Release 二进制或应用包：
+
+```bash
+# 只构建 Release 二进制，产物位于 .build/release/MXControl
+make build
+
+# 构建使用 ad-hoc 签名的 MXControl.app
+make bundle SIGNING_IDENTITY=-
+
+# 启动应用包
+open MXControl.app
+```
+
+安装、更新和制作 DMG：
+
+```bash
+# 首次构建并安装到 /Applications/MXControl.app
+make install SIGNING_IDENTITY=-
+
+# 结束正在运行的 MXControl，重新安装并启动
+make deploy SIGNING_IDENTITY=-
+
+# 生成 MXControl.app 和 MXControl.dmg
+make dmg SIGNING_IDENTITY=-
+
+# 挂载生成的 DMG
+open MXControl.dmg
+```
+
+如需使用自己的 Apple 开发者证书，先列出可用签名身份，再把完整名称传给 `SIGNING_IDENTITY`：
+
+```bash
+security find-identity -v -p codesigning
+
+make bundle SIGNING_IDENTITY="Apple Development: Your Name (TEAMID)"
 make dmg SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)"
+```
+
+验证签名和清理构建产物：
+
+```bash
+codesign --verify --deep --strict --verbose=2 MXControl.app
+codesign -dv --verbose=4 MXControl.app
+
+make clean
 ```
 
 ### 权限
@@ -340,21 +397,78 @@ Requirements:
 - Xcode Command Line Tools
 - Logitech HID++ 2.0 compatible device
 
+Install and check the required tools before the first build:
+
+```bash
+xcode-select --install
+swift --version
+git --version
+```
+
+Clone the repository and run the tests:
+
 ```bash
 git clone https://github.com/JokerNg/MXControl.git
 cd MXControl
 
-# Run directly
-make run
-
-# Build a DMG with the default ad-hoc signature
-make dmg
+swift test
 ```
 
-To use your own signing certificate:
+Run a development build:
 
 ```bash
+# Build with SwiftPM and run in the foreground
+make run
+
+# Or build Debug first, then run .build/debug/MXControl
+make debug
+```
+
+Build the Release binary or app bundle:
+
+```bash
+# Build only the Release binary at .build/release/MXControl
+make build
+
+# Build MXControl.app with an ad-hoc signature
+make bundle SIGNING_IDENTITY=-
+
+# Launch the app bundle
+open MXControl.app
+```
+
+Install, update, or create a DMG:
+
+```bash
+# Build and install to /Applications/MXControl.app for the first time
+make install SIGNING_IDENTITY=-
+
+# Stop a running MXControl instance, reinstall it, and launch it
+make deploy SIGNING_IDENTITY=-
+
+# Create MXControl.app and MXControl.dmg
+make dmg SIGNING_IDENTITY=-
+
+# Mount the generated DMG
+open MXControl.dmg
+```
+
+To use an Apple signing certificate, list the available identities and pass the complete name through `SIGNING_IDENTITY`:
+
+```bash
+security find-identity -v -p codesigning
+
+make bundle SIGNING_IDENTITY="Apple Development: Your Name (TEAMID)"
 make dmg SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)"
+```
+
+Verify the signature and clean generated files:
+
+```bash
+codesign --verify --deep --strict --verbose=2 MXControl.app
+codesign -dv --verbose=4 MXControl.app
+
+make clean
 ```
 
 ### Permissions

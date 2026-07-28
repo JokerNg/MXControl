@@ -60,21 +60,21 @@ final class KeyboardDevice: LogiDevice, @unchecked Sendable {
         // Battery (0x1004)
         if hasFeature(BatteryFeature.featureId) {
             do { try await loadBattery() }
-            catch { errors.append("Battery: \(error.localizedDescription)"); debugLog("[KeyboardDevice] Battery load failed: \(error)") }
+            catch { errors.append("电量：\(error.localizedDescription)"); debugLog("[KeyboardDevice] Battery load failed: \(error)") }
         }
 
         // Backlight (0x1983 or 0x1982)
         do { try await loadBacklight() }
-        catch { errors.append("Backlight: \(error.localizedDescription)"); debugLog("[KeyboardDevice] Backlight load failed: \(error)") }
+        catch { errors.append("背光：\(error.localizedDescription)"); debugLog("[KeyboardDevice] Backlight load failed: \(error)") }
 
         // Fn Inversion (0x40A3 / 0x40A2 / 0x40A0)
         do { try await loadFnInversion() }
-        catch { errors.append("FnInversion: \(error.localizedDescription)"); debugLog("[KeyboardDevice] FnInversion load failed: \(error)") }
+        catch { errors.append("功能键模式：\(error.localizedDescription)"); debugLog("[KeyboardDevice] FnInversion load failed: \(error)") }
 
         // Host info (0x1814 + 0x1815)
         if hasFeature(ChangeHostFeature.featureId) {
             do { try await loadHostInfo() }
-            catch { errors.append("HostInfo: \(error.localizedDescription)"); debugLog("[KeyboardDevice] HostInfo load failed: \(error)") }
+            catch { errors.append("主机信息：\(error.localizedDescription)"); debugLog("[KeyboardDevice] HostInfo load failed: \(error)") }
         }
 
         isFeaturesLoaded = true

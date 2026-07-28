@@ -54,6 +54,7 @@ private struct ResponseWaiter: Sendable {
 /// Metadata about a matched IOKit HID++ device.
 struct IOKitDeviceInfo: Sendable {
     let uid: String
+    let physicalDeviceId: String?
     let pid: Int
     let name: String
     let transport: TransportType  // .usb or .ble
@@ -531,6 +532,10 @@ final class USBTransport: HIDTransport, @unchecked Sendable {
 
         let info = IOKitDeviceInfo(
             uid: uid,
+            physicalDeviceId: IOHIDDeviceGetProperty(
+                device,
+                "PhysicalDeviceUniqueID" as CFString
+            ) as? String,
             pid: pid,
             name: name,
             transport: interfaceType,

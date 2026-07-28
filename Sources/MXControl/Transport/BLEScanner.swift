@@ -35,6 +35,10 @@ final class BLEScanner: NSObject, @unchecked Sendable {
     /// Whether scanning is active.
     private(set) var isScanning = false
 
+    /// Stop radio discovery after the initial window; existing connections remain active.
+    private let scanDuration: TimeInterval = 15
+    private var scanStopWorkItem: DispatchWorkItem?
+
     // MARK: - Public API
 
     /// Start scanning for Logitech BLE devices.
@@ -52,6 +56,9 @@ final class BLEScanner: NSObject, @unchecked Sendable {
     /// Stop scanning and disconnect all peripherals.
     func stopScanning() {
         debugLog("[BLEScanner] Stopping...")
+
+        scanStopWorkItem?.cancel()
+        scanStopWorkItem = nil
 
         if let cm = centralManager, cm.isScanning {
             cm.stopScan()
@@ -96,6 +103,17 @@ final class BLEScanner: NSObject, @unchecked Sendable {
             options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
         )
         isScanning = true
+
+        scanStopWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self, let cm = self.centralManager, cm.isScanning else { return }
+            cm.stopScan()
+            self.isScanning = false
+            self.scanStopWorkItem = nil
+            debugLog("[BLEScanner] Discovery window ended; connections remain active")
+        }
+        scanStopWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + scanDuration, execute: workItem)
     }
 }
 

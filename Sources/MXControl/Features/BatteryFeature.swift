@@ -24,11 +24,11 @@ enum BatteryFeature {
 
         var description: String {
             switch self {
-            case .discharging: return "Discharging"
-            case .charging: return "Charging"
-            case .chargingSlowly: return "Charging (slow)"
-            case .chargingComplete: return "Fully Charged"
-            case .chargingError: return "Charging Error"
+            case .discharging: return "未充电"
+            case .charging: return "正在充电"
+            case .chargingSlowly: return "正在慢速充电"
+            case .chargingComplete: return "已充满"
+            case .chargingError: return "充电异常"
             }
         }
 
@@ -53,10 +53,10 @@ enum BatteryFeature {
 
         var description: String {
             switch self {
-            case .critical: return "Critical"
-            case .low: return "Low"
-            case .good: return "Good"
-            case .full: return "Full"
+            case .critical: return "严重不足"
+            case .low: return "电量低"
+            case .good: return "电量充足"
+            case .full: return "电量已满"
             }
         }
     }

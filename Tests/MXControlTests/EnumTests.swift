@@ -1,17 +1,28 @@
 import Testing
 @testable import MXControl
 
+@Suite("Button Actions")
+struct ButtonActionTests {
+
+    @Test func sideButtonDesktopActionsPersistByRawValue() {
+        #expect(ButtonAction(rawValue: ButtonAction.previousDesktop.rawValue) == .previousDesktop)
+        #expect(ButtonAction(rawValue: ButtonAction.nextDesktop.rawValue) == .nextDesktop)
+        #expect(ButtonAction.sideButtonActions.contains(.previousDesktop))
+        #expect(ButtonAction.sideButtonActions.contains(.nextDesktop))
+    }
+}
+
 // MARK: - Battery Enum Tests
 
 @Suite("BatteryFeature Enums")
 struct BatteryEnumTests {
 
     @Test func chargingStatusDescriptions() {
-        #expect(BatteryFeature.ChargingStatus.discharging.description == "Discharging")
-        #expect(BatteryFeature.ChargingStatus.charging.description == "Charging")
-        #expect(BatteryFeature.ChargingStatus.chargingSlowly.description == "Charging (slow)")
-        #expect(BatteryFeature.ChargingStatus.chargingComplete.description == "Fully Charged")
-        #expect(BatteryFeature.ChargingStatus.chargingError.description == "Charging Error")
+        #expect(BatteryFeature.ChargingStatus.discharging.description == "未充电")
+        #expect(BatteryFeature.ChargingStatus.charging.description == "正在充电")
+        #expect(BatteryFeature.ChargingStatus.chargingSlowly.description == "正在慢速充电")
+        #expect(BatteryFeature.ChargingStatus.chargingComplete.description == "已充满")
+        #expect(BatteryFeature.ChargingStatus.chargingError.description == "充电异常")
     }
 
     @Test func chargingStatusIsCharging() {
@@ -23,10 +34,10 @@ struct BatteryEnumTests {
     }
 
     @Test func batteryLevelDescriptions() {
-        #expect(BatteryFeature.BatteryLevel.critical.description == "Critical")
-        #expect(BatteryFeature.BatteryLevel.low.description == "Low")
-        #expect(BatteryFeature.BatteryLevel.good.description == "Good")
-        #expect(BatteryFeature.BatteryLevel.full.description == "Full")
+        #expect(BatteryFeature.BatteryLevel.critical.description == "严重不足")
+        #expect(BatteryFeature.BatteryLevel.low.description == "电量低")
+        #expect(BatteryFeature.BatteryLevel.good.description == "电量充足")
+        #expect(BatteryFeature.BatteryLevel.full.description == "电量已满")
     }
 
     @Test func batteryLevelRawValues() {
@@ -115,14 +126,14 @@ struct SmartShiftEnumTests {
 struct HostsInfoEnumTests {
 
     @Test func busTypeDescriptions() {
-        #expect(HostsInfoFeature.BusType.unknown.description == "Unknown")
+        #expect(HostsInfoFeature.BusType.unknown.description == "未知")
         #expect(HostsInfoFeature.BusType.bluetooth.description == "Bluetooth")
         #expect(HostsInfoFeature.BusType.blePro.description == "Bolt")
         #expect(HostsInfoFeature.BusType.usb.description == "USB")
     }
 
     @Test func osTypeDescriptions() {
-        #expect(HostsInfoFeature.OSType.unknown.description == "Unknown")
+        #expect(HostsInfoFeature.OSType.unknown.description == "未知")
         #expect(HostsInfoFeature.OSType.windows.description == "Windows")
         #expect(HostsInfoFeature.OSType.winEmb.description == "Windows Embedded")
         #expect(HostsInfoFeature.OSType.linux.description == "Linux")

@@ -1,5 +1,51 @@
+import Foundation
 import Testing
 @testable import MXControl
+
+@Suite("DeviceManager Name Deduplication")
+struct DeviceManagerNameDeduplicationTests {
+
+    @Test @MainActor func matchesIOKitAndCoreBluetoothNames() {
+        #expect(DeviceManager.deviceNamesMatch("Wireless Mouse MX Master 3S", "MX Master 3S"))
+        #expect(DeviceManager.deviceNamesMatch("Wireless Keyboard MX Keys Mini", "MX Keys Mini"))
+    }
+
+    @Test @MainActor func keepsDifferentDevicesSeparate() {
+        #expect(!DeviceManager.deviceNamesMatch("MX Master 3S", "MX Master 3"))
+        #expect(!DeviceManager.deviceNamesMatch("MX Master 3S", "MX Keys Mini"))
+        #expect(!DeviceManager.deviceNamesMatch("Logitech Mouse", "Generic Mouse"))
+    }
+
+    @Test @MainActor func modelNumberMatchesWhenAdvertisementNameIsShorter() {
+        let mouse = BLEDeviceInfo(
+            name: "MX Master 3",
+            peripheralId: UUID(),
+            modelNumber: "MX Master 3S"
+        )
+
+        #expect(DeviceManager.bleInfo(
+            mouse,
+            matchesDeviceName: "Wireless Mouse MX Master 3S",
+            stableId: nil
+        ))
+    }
+
+    @Test @MainActor func stableIdentityPreventsWrongNameMerge() {
+        let peripheralId = UUID()
+        let mouse = BLEDeviceInfo(name: "MX Master 3S", peripheralId: peripheralId)
+
+        #expect(DeviceManager.bleInfo(
+            mouse,
+            matchesDeviceName: "MX Master 3S",
+            stableId: peripheralId.uuidString
+        ))
+        #expect(!DeviceManager.bleInfo(
+            mouse,
+            matchesDeviceName: "MX Master 3S",
+            stableId: UUID().uuidString
+        ))
+    }
+}
 
 @Suite("DeviceRegistry")
 struct DeviceRegistryTests {

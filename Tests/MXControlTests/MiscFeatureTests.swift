@@ -1,10 +1,71 @@
 import Testing
 @testable import MXControl
 
+@Suite("BLEInfoService")
+struct BLEInfoServiceTests {
+    @Test func initialReadWaitsForDiscoveryAndReads() {
+        #expect(!BLEInfoService.initialReadIsReady(
+            pendingReads: 0,
+            pendingCharacteristicDiscoveries: 1
+        ))
+        #expect(!BLEInfoService.initialReadIsReady(
+            pendingReads: 1,
+            pendingCharacteristicDiscoveries: 0
+        ))
+        #expect(BLEInfoService.initialReadIsReady(
+            pendingReads: 0,
+            pendingCharacteristicDiscoveries: 0
+        ))
+    }
+}
+
 // MARK: - HiResScrollFeature Tests
 
 @Suite("HiResScrollFeature")
 struct HiResScrollFeatureTests {
+
+    @Test func smoothScrollDirectionUsesMXControlSetting() {
+        #expect(ScrollInterceptor.applyDirection(12, naturalScrolling: true) == -12)
+        #expect(ScrollInterceptor.applyDirection(12, naturalScrolling: false) == 12)
+    }
+
+    @Test func nativeMainWheelCompensatesForMacOSDirection() {
+        #expect(MouseDevice.mainWheelDeviceInversion(
+            naturalScrolling: false,
+            systemNaturalScrolling: false,
+            smoothScrollEnabled: false
+        ) == false)
+        #expect(MouseDevice.mainWheelDeviceInversion(
+            naturalScrolling: true,
+            systemNaturalScrolling: false,
+            smoothScrollEnabled: false
+        ) == true)
+        #expect(MouseDevice.mainWheelDeviceInversion(
+            naturalScrolling: false,
+            systemNaturalScrolling: true,
+            smoothScrollEnabled: false
+        ) == true)
+        #expect(MouseDevice.mainWheelDeviceInversion(
+            naturalScrolling: true,
+            systemNaturalScrolling: true,
+            smoothScrollEnabled: false
+        ) == false)
+        #expect(MouseDevice.mainWheelDeviceInversion(
+            naturalScrolling: true,
+            systemNaturalScrolling: true,
+            smoothScrollEnabled: true
+        ) == false)
+        #expect(MouseDevice.mainWheelNaturalScrolling(
+            deviceInversion: false,
+            systemNaturalScrolling: true,
+            smoothScrollTarget: false
+        ) == true)
+        #expect(MouseDevice.mainWheelNaturalScrolling(
+            deviceInversion: true,
+            systemNaturalScrolling: false,
+            smoothScrollTarget: false
+        ) == true)
+    }
 
     @Test func getWheelCapability() async throws {
         let mock = MockHIDTransport()
@@ -76,6 +137,19 @@ struct HiResScrollFeatureTests {
 
         let sent = mock.sentRequests[0]
         #expect(sent.params[0] == 0x00)
+    }
+
+    @Test @MainActor func smoothScrollAvoidsDeviceSideDoubleInversion() async throws {
+        let mock = MockHIDTransport()
+        mock.respond(featureIndex: 0x0A, functionId: 0x02, params: [])
+
+        let mouse = MouseDevice(deviceIndex: 0x01, transport: mock)
+        await mouse.featureIndexCache.set(HiResScrollFeature.featureId, index: 0x0A)
+
+        try await mouse.setHiResScroll(hiRes: true, inverted: true)
+
+        #expect(mock.sentRequests[0].params == [0x03]) // target + hi-res; direction is applied in software
+        #expect(ScrollInterceptor.shared.naturalScrolling == true)
     }
 
     // MARK: - Short params fallback
@@ -174,14 +248,48 @@ struct PointerSpeedFeatureTests {
 @Suite("ThumbWheelFeature")
 struct ThumbWheelFeatureTests {
 
+    @Test func thumbWheelFollowsNaturalScrollingOrReversesIt() {
+        #expect(MouseDevice.thumbWheelDeviceInversion(
+            naturalScrolling: false,
+            reversed: false,
+            systemNaturalScrolling: false
+        ) == false)
+        #expect(MouseDevice.thumbWheelDeviceInversion(
+            naturalScrolling: true,
+            reversed: false,
+            systemNaturalScrolling: false
+        ) == true)
+        #expect(MouseDevice.thumbWheelDeviceInversion(
+            naturalScrolling: false,
+            reversed: true,
+            systemNaturalScrolling: false
+        ) == true)
+        #expect(MouseDevice.thumbWheelDeviceInversion(
+            naturalScrolling: true,
+            reversed: true,
+            systemNaturalScrolling: false
+        ) == false)
+        #expect(MouseDevice.thumbWheelDeviceInversion(
+            naturalScrolling: true,
+            reversed: false,
+            systemNaturalScrolling: true
+        ) == false)
+        #expect(MouseDevice.thumbWheelDeviceInversion(
+            naturalScrolling: true,
+            reversed: true,
+            systemNaturalScrolling: true
+        ) == true)
+    }
+
     @Test func getInfo() async throws {
         let mock = MockHIDTransport()
-        // nativeRes=1200(0x04B0), divertedRes=120(0x0078), flags=0x07
+        // nativeRes=1200(0x04B0), divertedRes=120(0x0078), direction=1, flags=0x03
         let params: [UInt8] = [
             0x04, 0xB0,   // native resolution
             0x00, 0x78,   // diverted resolution
-            0x07,         // all flags set
-        ] + [UInt8](repeating: 0, count: 11)
+            0x01,         // default direction
+            0x03,         // timestamp + touch
+        ] + [UInt8](repeating: 0, count: 10)
 
         mock.respond(featureIndex: 0x0C, functionId: 0x00, params: params)
 
@@ -198,9 +306,9 @@ struct ThumbWheelFeatureTests {
 
     @Test func getConfig() async throws {
         let mock = MockHIDTransport()
-        // flags: inverted=1, diverted=1 -> 0x03
+        // byte 0: diverted, byte 1 bit 0: inverted
         mock.respond(featureIndex: 0x0C, functionId: 0x01,
-                     params: [0x03] + [UInt8](repeating: 0, count: 15))
+                     params: [0x01, 0x01] + [UInt8](repeating: 0, count: 14))
 
         let config = try await ThumbWheelFeature.getConfig(
             transport: mock, deviceIndex: 0x01, featureIndex: 0x0C
@@ -233,7 +341,7 @@ struct ThumbWheelFeatureTests {
         )
 
         let sent = mock.sentRequests[0]
-        #expect(sent.params[0] == 0x01) // inverted only
+        #expect(sent.params == [0x00, 0x01])
     }
 
     @Test func setConfigBothTrue() async throws {
@@ -246,7 +354,30 @@ struct ThumbWheelFeatureTests {
         )
 
         let sent = mock.sentRequests[0]
-        #expect(sent.params[0] == 0x03)
+        #expect(sent.params == [0x01, 0x01])
+    }
+
+    @Test @MainActor func mouseRestoresNativeThumbWheelEventsWhenDiverted() async throws {
+        let mock = MockHIDTransport()
+        mock.respond(
+            featureIndex: 0x0C,
+            functionId: 0x00,
+            params: [0x04, 0xB0, 0x00, 0x78, 0x01, 0x03]
+        )
+        mock.respond(featureIndex: 0x0C, functionId: 0x01, params: [0x01, 0x01])
+        mock.respond(featureIndex: 0x0C, functionId: 0x02, params: [])
+
+        let mouse = MouseDevice(deviceIndex: 0x01, transport: mock)
+        mouse.features = [
+            .init(featureId: ThumbWheelFeature.featureId, index: 0x0C, type: 0)
+        ]
+        await mouse.featureIndexCache.set(ThumbWheelFeature.featureId, index: 0x0C)
+
+        await mouse.loadMouseFeatures()
+
+        let restore = mock.sentRequests.last
+        #expect(restore?.functionId == 0x02)
+        #expect(restore?.params == [0x00, 0x01]) // restore native HID, keep inversion
     }
 
     // MARK: - Short params fallback
@@ -263,7 +394,7 @@ struct ThumbWheelFeatureTests {
 
         #expect(info.nativeResolution == 1200)
         #expect(info.divertedResolution == 1200) // fallback: divertedRes = nativeRes
-        #expect(info.supportsInversion == false)  // flags fallback = 0
+        #expect(info.supportsInversion == true)
         #expect(info.supportsTouch == false)
         #expect(info.supportsTimestamp == false)
     }
@@ -280,7 +411,7 @@ struct ThumbWheelFeatureTests {
 
         #expect(info.nativeResolution == 1200)
         #expect(info.divertedResolution == 120)
-        #expect(info.supportsInversion == false)  // flags fallback = 0
+        #expect(info.supportsInversion == true)
         #expect(info.supportsTouch == false)
         #expect(info.supportsTimestamp == false)
     }
@@ -432,7 +563,7 @@ struct HostsInfoFeatureTests {
         )
 
         #expect(hosts.count == 1)
-        #expect(hosts[0].name == "Host 1") // fallback name
+        #expect(hosts[0].name == "主机 1") // fallback name
     }
 
     // MARK: - Short params fallback

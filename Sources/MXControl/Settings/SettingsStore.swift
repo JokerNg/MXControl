@@ -77,6 +77,7 @@ enum SettingsStore {
         var hiResInverted: Bool?
         var thumbWheelInverted: Bool?
         var buttonRemaps: [UInt16: UInt16]?  // CID -> target CID
+        var sideButtonActions: [UInt16: ButtonAction]?
         var gestureClickTimeLimit: Double?   // seconds (click-first time window)
         var gestureDragThreshold: Int?       // raw HID units
         var smoothScrollEnabled: Bool?
@@ -96,7 +97,10 @@ enum SettingsStore {
         if let mode = settings.smartShiftWheelMode { defaults.set(Int(mode), forKey: k("smartshift.wheel_mode")) }
         if let hiRes = settings.hiResEnabled { defaults.set(hiRes, forKey: k("hires.enabled")) }
         if let inverted = settings.hiResInverted { defaults.set(inverted, forKey: k("hires.inverted")) }
-        if let twInverted = settings.thumbWheelInverted { defaults.set(twInverted, forKey: k("thumbwheel.inverted")) }
+        if let twInverted = settings.thumbWheelInverted {
+            defaults.set(twInverted, forKey: k("thumbwheel.reversed"))
+            defaults.removeObject(forKey: k("thumbwheel.inverted"))
+        }
 
         if let remaps = settings.buttonRemaps {
             let thumbCID = SpecialKeysFeature.KnownCID.gestureButton.rawValue  // 0x00C3
@@ -104,6 +108,10 @@ enum SettingsStore {
             let filtered = remaps.filter { $0.key != thumbCID && $0.key != $0.value }
             let dict = Dictionary(uniqueKeysWithValues: filtered.map { (String($0.key), Int($0.value)) })
             defaults.set(dict, forKey: k("button_remaps"))
+        }
+        if let actions = settings.sideButtonActions {
+            let dict = Dictionary(uniqueKeysWithValues: actions.map { (String($0.key), $0.value.rawValue) })
+            defaults.set(dict, forKey: k("side_button_actions"))
         }
 
         if let ct = settings.gestureClickTimeLimit { defaults.set(ct, forKey: k("gesture.click_time")) }
@@ -144,8 +152,15 @@ enum SettingsStore {
         if defaults.object(forKey: k("hires.inverted")) != nil {
             settings.hiResInverted = defaults.bool(forKey: k("hires.inverted"))
         }
-        if defaults.object(forKey: k("thumbwheel.inverted")) != nil {
-            settings.thumbWheelInverted = defaults.bool(forKey: k("thumbwheel.inverted"))
+        if defaults.object(forKey: k("thumbwheel.reversed")) != nil {
+            settings.thumbWheelInverted = defaults.bool(forKey: k("thumbwheel.reversed"))
+        } else if defaults.object(forKey: k("thumbwheel.inverted")) != nil,
+                  let naturalScrolling = settings.hiResInverted {
+            // Migrate the old absolute device inversion into the new
+            // "opposite to Natural Scrolling" preference.
+            settings.thumbWheelInverted =
+                (defaults.bool(forKey: k("thumbwheel.inverted")) != naturalScrolling)
+                    != ScrollInterceptor.shared.systemNaturalScrolling
         }
 
         if defaults.object(forKey: k("gesture.click_time")) != nil {
@@ -176,6 +191,14 @@ enum SettingsStore {
                 }
             }
             settings.buttonRemaps = remaps
+        }
+        if let dict = defaults.dictionary(forKey: k("side_button_actions")) as? [String: String] {
+            settings.sideButtonActions = Dictionary(
+                uniqueKeysWithValues: dict.compactMap { key, value in
+                    guard let cid = UInt16(key), let action = ButtonAction(rawValue: value) else { return nil }
+                    return (cid, action)
+                }
+            )
         }
 
         return settings
@@ -233,6 +256,7 @@ enum SettingsStore {
             hiResInverted: mouse.hiResInverted,
             thumbWheelInverted: mouse.thumbWheelInverted,
             buttonRemaps: mouse.buttonRemaps.isEmpty ? nil : mouse.buttonRemaps,
+            sideButtonActions: mouse.sideButtonActions,
             gestureClickTimeLimit: mouse.gestureClickTimeLimit,
             gestureDragThreshold: mouse.gestureDragThreshold,
             smoothScrollEnabled: mouse.smoothScrollEnabled,
@@ -301,6 +325,10 @@ enum SettingsStore {
                 do { try await withRetry("ButtonRemap(\(cid))") { try await mouse.remapButton(controlId: cid, to: target) }; applied += 1 }
                 catch { failed += 1; logger.warning("[SettingsStore] Failed to restore button remap CID=\(cid)->CID=\(target): \(error.localizedDescription)") }
             }
+        }
+        if let actions = saved.sideButtonActions {
+            mouse.sideButtonActions = actions
+            applied += actions.count
         }
 
         if let ct = saved.gestureClickTimeLimit {

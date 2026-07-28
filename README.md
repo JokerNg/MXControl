@@ -1,9 +1,5 @@
 # MXControl
 
-<p align="center">
-  <img src="preview.png" alt="MXControl preview" width="520" />
-</p>
-
 A native macOS menu bar app that controls Logitech MX devices. Built because Logi Options+ is a 500MB Electron app that needs its own login system, phones home constantly, shows you ads for other Logitech products inside a mouse driver, and somehow uses more RAM than Xcode. For a mouse. And a keyboard.
 
 MXControl is ~2MB. It talks HID++ 2.0 directly to your devices, scroll data included. Logi Options+ still routes scroll through macOS and calls it a day. No account, no telemetry, no upsell banners, no "SmartActions" nobody asked for.
@@ -81,4 +77,8 @@ Needs macOS 15+ and Xcode command line tools. After first launch, go to System S
 
 ## License
 
-MIT
+[MIT](LICENSE). Copyright © 2026 Wisnu Wicaksono and MXControl contributors.
+
+This project is derived from [wiscaksono/MXControl](https://github.com/wiscaksono/MXControl).
+It is an independent, unofficial project and is not affiliated with or endorsed by Logitech.
+Logitech and related marks belong to their respective owners.

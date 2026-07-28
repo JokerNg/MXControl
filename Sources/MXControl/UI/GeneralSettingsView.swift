@@ -7,19 +7,19 @@ struct GeneralSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-                GeneralSettingsSection(title: "Startup") {
+                GeneralSettingsSection(title: "启动") {
                     ToggleRow(
-                        label: "Launch at login",
+                        label: "登录时启动",
                         isOn: $launchAtLogin,
-                        subtitle: "Start MXControl automatically when you sign in."
+                        subtitle: "登录系统时自动启动 MXControl。"
                     )
                 }
 
-                GeneralSettingsSection(title: "Visibility") {
+                GeneralSettingsSection(title: "显示") {
                     ToggleRow(
-                        label: "Hide MXControl until reopened",
+                        label: "隐藏 MXControl",
                         isOn: $hideAppUntilReopened,
-                        subtitle: "Removes the menu bar icon. Reopen MXControl from Finder or Spotlight to bring it back."
+                        subtitle: "隐藏菜单栏图标。可从“访达”或 Spotlight 重新打开 MXControl。"
                     )
                 }
             }

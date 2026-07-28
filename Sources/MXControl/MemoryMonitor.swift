@@ -1,3 +1,4 @@
+@preconcurrency import Darwin
 import Foundation
 import os
 

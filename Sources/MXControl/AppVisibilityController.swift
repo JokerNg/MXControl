@@ -63,6 +63,7 @@ final class AppVisibilityController: NSObject, NSApplicationDelegate {
             RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
         }
 
+        AppRuntime.shared.deviceManager.stopDiscovery()
         ScrollInterceptor.shared.stop()
     }
 

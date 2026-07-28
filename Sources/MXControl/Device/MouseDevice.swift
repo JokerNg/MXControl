@@ -46,6 +46,7 @@ final class MouseDevice: LogiDevice, @unchecked Sendable {
 
     // MARK: - Thumb Wheel State
 
+    /// Whether the thumb wheel runs opposite to the Natural Scrolling setting.
     var thumbWheelInverted: Bool = false
     var thumbWheelSupportsInversion: Bool = false
 
@@ -54,6 +55,8 @@ final class MouseDevice: LogiDevice, @unchecked Sendable {
     var buttons: [SpecialKeysFeature.ControlInfo] = []
     /// Per-button remap targets: CID -> remapped target CID (0 = default).
     var buttonRemaps: [UInt16: UInt16] = [:]
+    /// Software actions for the diverted Back/Forward side buttons.
+    var sideButtonActions: [UInt16: ButtonAction] = [:]
     /// Last pressed diverted CIDs from SpecialKeys event 0, for press-edge detection.
     private var lastPressedDivertedCIDs: Set<UInt16> = []
 
@@ -135,49 +138,49 @@ final class MouseDevice: LogiDevice, @unchecked Sendable {
         // Battery (0x1004)
         if hasFeature(BatteryFeature.featureId) {
             do { try await loadBattery() }
-            catch { errors.append("Battery: \(error.localizedDescription)"); debugLog("[MouseDevice] Battery load failed: \(error)") }
+            catch { errors.append("电量：\(error.localizedDescription)"); debugLog("[MouseDevice] Battery load failed: \(error)") }
         }
 
         // DPI (0x2201)
         if hasFeature(AdjustableDPIFeature.featureId) {
             do { try await loadDPI() }
-            catch { errors.append("DPI: \(error.localizedDescription)"); debugLog("[MouseDevice] DPI load failed: \(error)") }
+            catch { errors.append("DPI：\(error.localizedDescription)"); debugLog("[MouseDevice] DPI load failed: \(error)") }
         }
 
         // SmartShift (0x2111)
         if hasFeature(SmartShiftFeature.featureId) {
             do { try await loadSmartShift() }
-            catch { errors.append("SmartShift: \(error.localizedDescription)"); debugLog("[MouseDevice] SmartShift load failed: \(error)") }
+            catch { errors.append("SmartShift：\(error.localizedDescription)"); debugLog("[MouseDevice] SmartShift load failed: \(error)") }
         }
 
         // Hi-Res Scroll (0x2121)
         if hasFeature(HiResScrollFeature.featureId) {
             do { try await loadHiResScroll() }
-            catch { errors.append("HiResScroll: \(error.localizedDescription)"); debugLog("[MouseDevice] HiResScroll load failed: \(error)") }
+            catch { errors.append("高分辨率滚动：\(error.localizedDescription)"); debugLog("[MouseDevice] HiResScroll load failed: \(error)") }
         }
 
         // Pointer Speed (0x2205)
         if hasFeature(PointerSpeedFeature.featureId) {
             do { try await loadPointerSpeed() }
-            catch { errors.append("PointerSpeed: \(error.localizedDescription)"); debugLog("[MouseDevice] PointerSpeed load failed: \(error)") }
+            catch { errors.append("指针速度：\(error.localizedDescription)"); debugLog("[MouseDevice] PointerSpeed load failed: \(error)") }
         }
 
         // Thumb Wheel (0x2150)
         if hasFeature(ThumbWheelFeature.featureId) {
             do { try await loadThumbWheel() }
-            catch { errors.append("ThumbWheel: \(error.localizedDescription)"); debugLog("[MouseDevice] ThumbWheel load failed: \(error)") }
+            catch { errors.append("侧边滚轮：\(error.localizedDescription)"); debugLog("[MouseDevice] ThumbWheel load failed: \(error)") }
         }
 
         // Buttons (0x1B04)
         if hasFeature(SpecialKeysFeature.featureId) {
             do { try await loadButtons() }
-            catch { errors.append("Buttons: \(error.localizedDescription)"); debugLog("[MouseDevice] Buttons load failed: \(error)") }
+            catch { errors.append("按键：\(error.localizedDescription)"); debugLog("[MouseDevice] Buttons load failed: \(error)") }
         }
 
         // Host info (0x1814 + 0x1815)
         if hasFeature(ChangeHostFeature.featureId) {
             do { try await loadHostInfo() }
-            catch { errors.append("HostInfo: \(error.localizedDescription)"); debugLog("[MouseDevice] HostInfo load failed: \(error)") }
+            catch { errors.append("主机信息：\(error.localizedDescription)"); debugLog("[MouseDevice] HostInfo load failed: \(error)") }
         }
 
         isFeaturesLoaded = true
@@ -314,7 +317,12 @@ final class MouseDevice: LogiDevice, @unchecked Sendable {
         )
 
         hiResEnabled = mode.hiRes
-        hiResInverted = mode.inverted
+        hiResInverted = Self.mainWheelNaturalScrolling(
+            deviceInversion: mode.inverted,
+            systemNaturalScrolling: ScrollInterceptor.shared.systemNaturalScrolling,
+            smoothScrollTarget: mode.target
+        )
+        ScrollInterceptor.shared.naturalScrolling = hiResInverted
 
         // If smooth scroll is enabled, activate HID++ target mode for hi-res notifications
         if smoothScrollEnabled {
@@ -336,9 +344,16 @@ final class MouseDevice: LogiDevice, @unchecked Sendable {
                 featureIndex: idx,
                 target: enabled,
                 hiRes: true,
-                inverted: hiResInverted
+                // HID++ target mode bypasses macOS direction handling; apply it
+                // once in ScrollInterceptor instead of risking double inversion.
+                inverted: Self.mainWheelDeviceInversion(
+                    naturalScrolling: hiResInverted,
+                    systemNaturalScrolling: ScrollInterceptor.shared.systemNaturalScrolling,
+                    smoothScrollEnabled: enabled
+                )
             )
             ScrollInterceptor.shared.hiResActive = enabled
+            ScrollInterceptor.shared.naturalScrolling = hiResInverted
             logger.info("[MouseDevice] HiRes target set to \(enabled ? "HID++" : "HID")")
         } catch {
             // Always force hiResActive off on failure to prevent the CGEventTap from
@@ -387,9 +402,23 @@ final class MouseDevice: LogiDevice, @unchecked Sendable {
             deviceIndex: deviceIndex,
             featureIndex: idx
         )
-        thumbWheelInverted = config.inverted
+        thumbWheelInverted =
+            (config.inverted != hiResInverted)
+                != ScrollInterceptor.shared.systemNaturalScrolling
 
-        logger.info("[MouseDevice] Thumb wheel: inverted=\(config.inverted) supportsInversion=\(info.supportsInversion)")
+        // MXControl consumes the native horizontal CGEvent path. If another app left
+        // the wheel diverted, no component here consumes its HID++ notifications.
+        if config.diverted {
+            try await ThumbWheelFeature.setConfig(
+                transport: transport,
+                deviceIndex: deviceIndex,
+                featureIndex: idx,
+                inverted: config.inverted,
+                diverted: false
+            )
+        }
+
+        logger.info("[MouseDevice] Thumb wheel: inverted=\(config.inverted) supportsInversion=\(info.supportsInversion) restoredHID=\(config.diverted)")
     }
 
     // MARK: - Buttons
@@ -636,11 +665,17 @@ final class MouseDevice: LogiDevice, @unchecked Sendable {
             featureIndex: idx,
             target: smoothScrollEnabled,  // preserve HID++ target when smooth scroll is on
             hiRes: hiRes,
-            inverted: inverted
+            inverted: Self.mainWheelDeviceInversion(
+                naturalScrolling: inverted,
+                systemNaturalScrolling: ScrollInterceptor.shared.systemNaturalScrolling,
+                smoothScrollEnabled: smoothScrollEnabled
+            )
         )
 
         hiResEnabled = hiRes
         hiResInverted = inverted
+        ScrollInterceptor.shared.naturalScrolling = inverted
+        try await syncThumbWheelDirection()
         logger.info("[MouseDevice] HiRes set: enabled=\(hiRes) inverted=\(inverted) target=\(self.smoothScrollEnabled)")
     }
 
@@ -667,8 +702,15 @@ final class MouseDevice: LogiDevice, @unchecked Sendable {
 
     // MARK: - Write: Set Thumb Wheel
 
-    /// Write thumb wheel inversion setting to device.
+    /// Set whether the thumb wheel runs opposite to Natural Scrolling.
     func setThumbWheelInverted(_ inverted: Bool) async throws {
+        thumbWheelInverted = inverted
+        try await syncThumbWheelDirection()
+        logger.info("[MouseDevice] Thumb wheel reversed relative to natural scrolling: \(inverted)")
+    }
+
+    private func syncThumbWheelDirection() async throws {
+        guard hasFeature(ThumbWheelFeature.featureId) else { return }
         let idx = try await featureIndexCache.resolve(
             featureId: ThumbWheelFeature.featureId,
             transport: transport,
@@ -679,12 +721,37 @@ final class MouseDevice: LogiDevice, @unchecked Sendable {
             transport: transport,
             deviceIndex: deviceIndex,
             featureIndex: idx,
-            inverted: inverted,
+            inverted: Self.thumbWheelDeviceInversion(
+                naturalScrolling: hiResInverted,
+                reversed: thumbWheelInverted,
+                systemNaturalScrolling: ScrollInterceptor.shared.systemNaturalScrolling
+            ),
             diverted: false
         )
+    }
 
-        thumbWheelInverted = inverted
-        logger.info("[MouseDevice] Thumb wheel inverted: \(inverted)")
+    nonisolated static func mainWheelDeviceInversion(
+        naturalScrolling: Bool,
+        systemNaturalScrolling: Bool,
+        smoothScrollEnabled: Bool
+    ) -> Bool {
+        smoothScrollEnabled ? false : naturalScrolling != systemNaturalScrolling
+    }
+
+    nonisolated static func mainWheelNaturalScrolling(
+        deviceInversion: Bool,
+        systemNaturalScrolling: Bool,
+        smoothScrollTarget: Bool
+    ) -> Bool {
+        smoothScrollTarget ? deviceInversion : deviceInversion != systemNaturalScrolling
+    }
+
+    nonisolated static func thumbWheelDeviceInversion(
+        naturalScrolling: Bool,
+        reversed: Bool,
+        systemNaturalScrolling: Bool
+    ) -> Bool {
+        (naturalScrolling != reversed) != systemNaturalScrolling
     }
 
     // MARK: - Write: Remap Button
@@ -712,6 +779,41 @@ final class MouseDevice: LogiDevice, @unchecked Sendable {
         }
 
         logger.info("[MouseDevice] Button CID \(controlId) remapped to \(target)")
+    }
+
+    func sideButtonAction(for controlId: UInt16) -> ButtonAction {
+        sideButtonActions[controlId] ?? defaultSideButtonAction(for: controlId)
+    }
+
+    func setSideButtonAction(_ action: ButtonAction, for controlId: UInt16) {
+        if action == .defaultAction {
+            sideButtonActions.removeValue(forKey: controlId)
+        } else {
+            sideButtonActions[controlId] = action
+        }
+    }
+
+    private func defaultSideButtonAction(for controlId: UInt16) -> ButtonAction {
+        controlId == SpecialKeysFeature.KnownCID.backButton.rawValue ? .back : .forward
+    }
+
+    private func performSideButtonAction(for controlId: UInt16) {
+        switch sideButtonAction(for: controlId) {
+        case .defaultAction:
+            break
+        case .back:
+            MacActions.navigateBack()
+        case .forward:
+            MacActions.navigateForward()
+        case .previousDesktop:
+            MacActions.workspaceLeft()
+        case .nextDesktop:
+            MacActions.workspaceRight()
+        case .doNothing:
+            break
+        default:
+            break
+        }
     }
 
     // MARK: - Re-arm Divert (BLE Reconnection)
@@ -811,10 +913,10 @@ final class MouseDevice: LogiDevice, @unchecked Sendable {
             lastPressedDivertedCIDs = currentPressed
 
             if newlyPressed.contains(SpecialKeysFeature.KnownCID.backButton.rawValue) {
-                MacActions.navigateBack()
+                performSideButtonAction(for: SpecialKeysFeature.KnownCID.backButton.rawValue)
             }
             if newlyPressed.contains(SpecialKeysFeature.KnownCID.forwardButton.rawValue) {
-                MacActions.navigateForward()
+                performSideButtonAction(for: SpecialKeysFeature.KnownCID.forwardButton.rawValue)
             }
 
             gestureEngine?.handleButtonEvent(pressedCIDs: pressedCIDs)

@@ -11,9 +11,10 @@ struct SliderRow: View {
     var suffix: String = ""
 
     /// Action called when slider drag ends (commit the value to device).
-    var onCommit: (() -> Void)?
+    var onCommit: ((Double) async throws -> Void)?
 
     @State private var pendingValue: Double?
+    @State private var isApplying = false
 
     /// The displayed value: pending during drag, otherwise the bound value.
     private var displayValue: Double {
@@ -45,13 +46,24 @@ struct SliderRow: View {
                 if !editing {
                     // Commit pending value to binding and device
                     if let pending = pendingValue {
+                        let oldValue = value
                         value = pending
                         pendingValue = nil
-                        onCommit?()
+                        guard let onCommit else { return }
+                        isApplying = true
+                        Task { @MainActor in
+                            do {
+                                try await onCommit(pending)
+                            } catch {
+                                value = oldValue
+                            }
+                            isApplying = false
+                        }
                     }
                 }
             }
             .controlSize(.small)
+            .disabled(isApplying)
         }
     }
 }
@@ -66,7 +78,7 @@ extension SliderRow {
         range: ClosedRange<Int>,
         step: Int = 1,
         suffix: String = "",
-        onCommit: (() -> Void)? = nil
+        onCommit: ((Int) async throws -> Void)? = nil
     ) {
         self.label = label
         self._value = Binding(
@@ -77,6 +89,8 @@ extension SliderRow {
         self.step = Double(step)
         self.format = "%.0f"
         self.suffix = suffix
-        self.onCommit = onCommit
+        self.onCommit = onCommit.map { commit in
+            { value in try await commit(Int(value)) }
+        }
     }
 }

@@ -5,14 +5,20 @@ import SwiftUI
 /// These map to HID++ CIDs or virtual actions that the MX Master 3S supports.
 /// For CID-based remaps, the device maps the button to behave like another button.
 /// For "Default", the remap is cleared (CID 0).
-enum ButtonAction: Hashable, CaseIterable, CustomStringConvertible {
+enum ButtonAction: String, Hashable, CaseIterable, CustomStringConvertible, Sendable {
     case defaultAction
     case middleClick
     case back
     case forward
+    case previousDesktop
+    case nextDesktop
     case gestureButton
     case smartShiftToggle
     case doNothing
+
+    static let sideButtonActions: [ButtonAction] = [
+        .defaultAction, .back, .forward, .previousDesktop, .nextDesktop, .doNothing,
+    ]
 
     /// The CID to send as remap target (0 = restore default).
     var remapCID: UInt16 {
@@ -21,6 +27,7 @@ enum ButtonAction: Hashable, CaseIterable, CustomStringConvertible {
         case .middleClick: return 82
         case .back: return 83
         case .forward: return 86
+        case .previousDesktop, .nextDesktop: return 0
         case .gestureButton: return 195
         case .smartShiftToggle: return 196
         case .doNothing: return 0   // Divert + no handler = do nothing
@@ -29,7 +36,7 @@ enum ButtonAction: Hashable, CaseIterable, CustomStringConvertible {
 
     /// Whether this action requires diverting the button to software.
     var requiresDivert: Bool {
-        self == .doNothing
+        self == .doNothing || self == .previousDesktop || self == .nextDesktop
     }
 
     var description: String {
@@ -39,13 +46,15 @@ enum ButtonAction: Hashable, CaseIterable, CustomStringConvertible {
     /// Human-readable action name.
     var displayName: String {
         switch self {
-        case .defaultAction: return "Default"
-        case .middleClick: return "Middle Click"
-        case .back: return "Back"
-        case .forward: return "Forward"
-        case .gestureButton: return "Gesture"
+        case .defaultAction: return "默认"
+        case .middleClick: return "中键点击"
+        case .back: return "后退"
+        case .forward: return "前进"
+        case .previousDesktop: return "上一个桌面"
+        case .nextDesktop: return "下一个桌面"
+        case .gestureButton: return "手势"
         case .smartShiftToggle: return "SmartShift"
-        case .doNothing: return "Do Nothing"
+        case .doNothing: return "无操作"
         }
     }
 
@@ -56,6 +65,8 @@ enum ButtonAction: Hashable, CaseIterable, CustomStringConvertible {
         case .middleClick: return "computermouse"
         case .back: return "chevron.left"
         case .forward: return "chevron.right"
+        case .previousDesktop: return "rectangle.leadinghalf.inset.filled.arrow.leading"
+        case .nextDesktop: return "rectangle.trailinghalf.inset.filled.arrow.trailing"
         case .gestureButton: return "hand.draw"
         case .smartShiftToggle: return "arrow.up.arrow.down.circle"
         case .doNothing: return "nosign"
@@ -81,6 +92,7 @@ struct ActionPicker: View {
     let buttonName: String
     let controlId: UInt16
     @Binding var currentAction: ButtonAction
+    var actions: [ButtonAction] = ButtonAction.allCases
     var onChanged: ((ButtonAction) -> Void)?
 
     var body: some View {
@@ -95,7 +107,7 @@ struct ActionPicker: View {
             Spacer()
 
             Picker("", selection: $currentAction) {
-                ForEach(ButtonAction.allCases, id: \.self) { action in
+                ForEach(actions, id: \.self) { action in
                     Label(action.displayName, systemImage: action.systemImage)
                         .tag(action)
                 }

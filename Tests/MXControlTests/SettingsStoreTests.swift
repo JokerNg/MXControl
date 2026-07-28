@@ -81,6 +81,39 @@ struct SettingsStoreTests {
         #expect(loaded.buttonRemaps == nil)
     }
 
+    @Test func migratesAbsoluteThumbWheelDirectionToRelativePreference() {
+        let name = uniqueDeviceName()
+        defer { cleanup(deviceName: name) }
+        let prefix = "mxcontrol.\(name.lowercased().replacingOccurrences(of: " ", with: "_"))"
+        let defaults = UserDefaults.standard
+        defaults.set(true, forKey: "\(prefix).hires.inverted")
+        defaults.set(true, forKey: "\(prefix).thumbwheel.inverted")
+
+        let loaded = SettingsStore.loadMouseSettings(deviceName: name)
+
+        #expect(
+            loaded.thumbWheelInverted
+                == ScrollInterceptor.shared.systemNaturalScrolling
+        )
+    }
+
+    @Test func sideButtonActionsRoundTripAndClear() {
+        let name = uniqueDeviceName()
+        defer { cleanup(deviceName: name) }
+
+        SettingsStore.saveMouseSettings(
+            .init(sideButtonActions: [83: .previousDesktop, 86: .nextDesktop]),
+            deviceName: name
+        )
+
+        let loaded = SettingsStore.loadMouseSettings(deviceName: name)
+        #expect(loaded.sideButtonActions?[83] == .previousDesktop)
+        #expect(loaded.sideButtonActions?[86] == .nextDesktop)
+
+        SettingsStore.saveMouseSettings(.init(sideButtonActions: [:]), deviceName: name)
+        #expect(SettingsStore.loadMouseSettings(deviceName: name).sideButtonActions?.isEmpty == true)
+    }
+
     // MARK: - Button Remap Filtering
 
     @Test func mouseSettingsFilterThumbButton() {

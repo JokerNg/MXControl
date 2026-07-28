@@ -63,6 +63,7 @@ final class BLEInfoService: NSObject, CBPeripheralDelegate, @unchecked Sendable 
 
     /// Track pending reads to know when initial discovery is complete.
     private var pendingReads = 0
+    private var pendingCharacteristicDiscoveries = 0
     private var initialReadComplete = false
 
     /// Battery level characteristic (for unsubscribe on close).
@@ -143,6 +144,7 @@ final class BLEInfoService: NSObject, CBPeripheralDelegate, @unchecked Sendable 
         }
 
         debugLog("[BLEInfo] Found \(services.count) service(s) for \(info.name)")
+        pendingCharacteristicDiscoveries = services.count
         for service in services {
             debugLog("[BLEInfo]   Service: \(service.uuid)")
             peripheral.discoverCharacteristics(nil, for: service)
@@ -150,6 +152,13 @@ final class BLEInfoService: NSObject, CBPeripheralDelegate, @unchecked Sendable 
     }
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: (any Error)?) {
+        defer {
+            if pendingCharacteristicDiscoveries > 0 {
+                pendingCharacteristicDiscoveries -= 1
+            }
+            resolveInitialReadIfReady()
+        }
+
         if let error {
             debugLog("[BLEInfo] Characteristic discovery failed: \(error)")
             return
@@ -171,13 +180,6 @@ final class BLEInfoService: NSObject, CBPeripheralDelegate, @unchecked Sendable 
                 peripheral.setNotifyValue(true, for: char)
                 debugLog("[BLEInfo] Subscribed to battery level notify")
             }
-        }
-
-        // If no readable characteristics, resolve immediately
-        if pendingReads == 0 && !initialReadComplete {
-            initialReadComplete = true
-            readyContinuation?.resume(returning: info)
-            readyContinuation = nil
         }
     }
 
@@ -241,7 +243,21 @@ final class BLEInfoService: NSObject, CBPeripheralDelegate, @unchecked Sendable 
         if pendingReads > 0 {
             pendingReads -= 1
         }
-        if pendingReads == 0 && !initialReadComplete {
+        resolveInitialReadIfReady()
+    }
+
+    nonisolated static func initialReadIsReady(
+        pendingReads: Int,
+        pendingCharacteristicDiscoveries: Int
+    ) -> Bool {
+        pendingReads == 0 && pendingCharacteristicDiscoveries == 0
+    }
+
+    private func resolveInitialReadIfReady() {
+        if Self.initialReadIsReady(
+            pendingReads: pendingReads,
+            pendingCharacteristicDiscoveries: pendingCharacteristicDiscoveries
+        ) && !initialReadComplete {
             initialReadComplete = true
             debugLog("[BLEInfo] Initial read complete for \(info.name): battery=\(info.batteryLevel.map(String.init) ?? "?")% model=\(info.modelNumber ?? "?")")
             readyContinuation?.resume(returning: info)

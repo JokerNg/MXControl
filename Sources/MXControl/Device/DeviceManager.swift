@@ -52,6 +52,9 @@ final class DeviceManager {
     /// Map from LogiDevice.id → IOKit device UID, for send routing.
     private var deviceIdToUID: [UUID: String] = [:]
 
+    /// Stable Bluetooth identity for direct BLE devices, when IOKit exposes one.
+    private var deviceStableIds: [UUID: String] = [:]
+
     /// BLE device UIDs currently being initialized — prevents concurrent init from re-enumeration.
     private var initializingBLEUIDs: Set<String> = []
 
@@ -66,9 +69,22 @@ final class DeviceManager {
     /// Active BLEInfoService instances, keyed by CBPeripheral UUID.
     private var bleInfoServices: [UUID: BLEInfoService] = [:]
 
-    /// BLE-only devices discovered via CoreBluetooth (battery + device info only).
-    /// These are NOT full LogiDevice instances — HID++ is inaccessible via BLE.
+    /// Metadata discovered through CoreBluetooth (battery + device info only).
+    /// Matching entries supplement full HID++ devices and are hidden from the root list.
     var bleDevices: [BLEDeviceInfo] = []
+
+    /// CoreBluetooth devices that do not already have a full HID++ device row.
+    var standaloneBLEDevices: [BLEDeviceInfo] {
+        bleDevices.filter { bleInfo in
+            !devices.contains { device in
+                Self.bleInfo(
+                    bleInfo,
+                    matchesDeviceName: device.name,
+                    stableId: deviceStableIds[device.id]
+                )
+            }
+        }
+    }
 
     /// CBPeripheral UUIDs currently being initialized — prevents concurrent init.
     private var initializingCBPeripherals: Set<UUID> = []
@@ -190,11 +206,20 @@ final class DeviceManager {
         deviceTransportType.removeAll()
         uidToDeviceId.removeAll()
         deviceIdToUID.removeAll()
+        deviceStableIds.removeAll()
         initializingBLEUIDs.removeAll()
         initializedBLEUIDs.removeAll()
         BatteryNotifier.reset()
         isScanning = false
         statusMessage = "Stopped"
+    }
+
+    /// Return device-owned input to macOS before replacing the transport.
+    func restartDiscovery() async {
+        await resetScrollTargetForAllMice()
+        stopDiscovery()
+        devices.removeAll()
+        startDiscovery()
     }
 
     // MARK: - Scroll Target Reset
@@ -351,7 +376,7 @@ final class DeviceManager {
         }
 
         // Dedup: skip if same device name already found via USB
-        if usbDeviceNames.contains(info.name) {
+        if hasUSBDevice(named: info.name) {
             debugLog("[DeviceManager] BLE IOKit skip \(info.name) — already on USB")
             logger.info("[DeviceManager] Skipping BLE device \(info.name, privacy: .public) — already connected via USB")
             return
@@ -385,7 +410,7 @@ final class DeviceManager {
             try await probe.initialize()
 
             // Re-check dedup after initialization (name might differ from IOKit product name)
-            if usbDeviceNames.contains(probe.name) {
+            if hasUSBDevice(named: probe.name) {
                 debugLog("[DeviceManager] BLE IOKit skip \(probe.name) — already on USB (post-init dedup)")
                 return
             }
@@ -396,18 +421,10 @@ final class DeviceManager {
             deviceTransportType[device.id] = .ble
             uidToDeviceId[info.uid] = device.id
             deviceIdToUID[device.id] = info.uid
-            initializedBLEUIDs.insert(info.uid)
-
-            // Remove duplicate CB BLEDeviceInfo (if CoreBluetooth scanner already read battery)
-            if let idx = bleDevices.firstIndex(where: { $0.name == device.name }) {
-                let peripheralId = bleDevices[idx].peripheralId
-                debugLog("[DeviceManager] Removing CB duplicate for \(device.name) — IOKit HID++ preferred")
-                bleDevices.remove(at: idx)
-                if let svc = bleInfoServices.removeValue(forKey: peripheralId) {
-                    svc.close()
-                }
-                initializedCBPeripherals.remove(peripheralId)
+            if let stableId = info.physicalDeviceId {
+                deviceStableIds[device.id] = stableId
             }
+            initializedBLEUIDs.insert(info.uid)
 
             isScanning = false
             updateStatus()
@@ -473,16 +490,6 @@ final class DeviceManager {
             debugLog("[DeviceManager] CB skip \(name) — already initialized")
             return
         }
-        if usbDeviceNames.contains(name) {
-            debugLog("[DeviceManager] CB skip \(name) — already on USB")
-            return
-        }
-        // Dedup: skip if already initialized via IOKit BLE (full HID++)
-        if devices.contains(where: { $0.name == name }) {
-            debugLog("[DeviceManager] CB skip \(name) — already initialized via IOKit (full HID++)")
-            return
-        }
-
         initializingCBPeripherals.insert(peripheralId)
         defer { initializingCBPeripherals.remove(peripheralId) }
 
@@ -493,13 +500,6 @@ final class DeviceManager {
 
         do {
             let info = try await infoService.open()
-
-            // Dedup: skip if same device already found via USB
-            if usbDeviceNames.contains(info.name) {
-                debugLog("[DeviceManager] CB skip \(info.name) — already on USB (post-read dedup)")
-                infoService.close()
-                return
-            }
 
             // Also check if already in BLE device list
             if bleDevices.contains(where: { $0.peripheralId == peripheralId }) {
@@ -566,6 +566,7 @@ final class DeviceManager {
             devices.removeAll { usbDeviceIds.contains($0.id) }
             for id in usbDeviceIds {
                 deviceTransportType.removeValue(forKey: id)
+                deviceStableIds.removeValue(forKey: id)
                 if let uid = deviceIdToUID.removeValue(forKey: id) {
                     uidToDeviceId.removeValue(forKey: uid)
                 }
@@ -588,6 +589,7 @@ final class DeviceManager {
                 devices.removeAll { $0.id == deviceId }
                 deviceTransportType.removeValue(forKey: deviceId)
                 deviceIdToUID.removeValue(forKey: deviceId)
+                deviceStableIds.removeValue(forKey: deviceId)
             }
             uidToDeviceId.removeValue(forKey: info.uid)
             initializedBLEUIDs.remove(info.uid)
@@ -637,25 +639,63 @@ final class DeviceManager {
     private func removeDuplicateBLEDevice(name: String) {
         // Remove from IOKit BLE devices
         if let bleDevice = devices.first(where: {
-            $0.name == name && deviceTransportType[$0.id] == .ble
+            Self.deviceNamesMatch($0.name, name) && deviceTransportType[$0.id] == .ble
         }) {
             debugLog("[DeviceManager] Removing BLE (IOKit) duplicate: \(name) (USB preferred)")
             devices.removeAll { $0.id == bleDevice.id }
             deviceTransportType.removeValue(forKey: bleDevice.id)
+            deviceStableIds.removeValue(forKey: bleDevice.id)
             if let uid = deviceIdToUID.removeValue(forKey: bleDevice.id) {
                 uidToDeviceId.removeValue(forKey: uid)
             }
         }
 
-        // Remove from CoreBluetooth BLE devices
-        if let idx = bleDevices.firstIndex(where: { $0.name == name }) {
-            let peripheralId = bleDevices[idx].peripheralId
-            debugLog("[DeviceManager] Removing BLE (CB) duplicate: \(name) (USB preferred)")
-            bleDevices.remove(at: idx)
-            if let svc = bleInfoServices.removeValue(forKey: peripheralId) {
-                svc.close()
-            }
-            initializedCBPeripherals.remove(peripheralId)
+        // Keep matching CoreBluetooth metadata and its battery subscription.
+        // The list hides it while the full HID++ device is present.
+    }
+
+    private func hasUSBDevice(named name: String) -> Bool {
+        usbDeviceNames.contains { Self.deviceNamesMatch($0, name) }
+    }
+
+    /// Compare normalized model names without prefix guessing.
+    static func deviceNamesMatch(_ lhs: String, _ rhs: String) -> Bool {
+        let ignoredWords = Set(["wireless", "mouse", "keyboard"])
+        let normalize = { (name: String) in
+            name.lowercased()
+                .components(separatedBy: CharacterSet.alphanumerics.inverted)
+                .filter { !$0.isEmpty && !ignoredWords.contains($0) }
+                .joined()
+        }
+        let left = normalize(lhs)
+        let right = normalize(rhs)
+        return !left.isEmpty && left == right
+    }
+
+    static func bleInfo(
+        _ bleInfo: BLEDeviceInfo,
+        matchesDeviceName deviceName: String,
+        stableId: String?
+    ) -> Bool {
+        if let stableId, let stableUUID = UUID(uuidString: stableId) {
+            return stableUUID == bleInfo.peripheralId
+        }
+
+        if let modelName = bleInfo.modelNumber?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !modelName.isEmpty,
+           deviceNamesMatch(deviceName, modelName) {
+            return true
+        }
+        return deviceNamesMatch(deviceName, bleInfo.name)
+    }
+
+    func bleInfo(for device: LogiDevice) -> BLEDeviceInfo? {
+        bleDevices.first {
+            Self.bleInfo(
+                $0,
+                matchesDeviceName: device.name,
+                stableId: deviceStableIds[device.id]
+            )
         }
     }
 
@@ -728,7 +768,7 @@ final class DeviceManager {
     private func updateStatus() {
         let usbCount = deviceTransportType.values.filter { $0 == .usb }.count
         let bleIOKitCount = deviceTransportType.values.filter { $0 == .ble }.count
-        let bleCBCount = bleDevices.count
+        let bleCBCount = standaloneBLEDevices.count
         let totalBLE = bleIOKitCount + bleCBCount
         let total = devices.count + bleCBCount
 

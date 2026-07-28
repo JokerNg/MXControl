@@ -4,7 +4,7 @@ BUILD_DIR := .build/release
 BINARY := $(BUILD_DIR)/$(APP_NAME)
 APP_BUNDLE := $(APP_NAME).app
 INSTALL_DIR := /Applications
-SIGNING_IDENTITY ?= Apple Development: wwicaksono96@gmail.com (UYQPA4SKQ3)
+SIGNING_IDENTITY ?= -
 
 .PHONY: build run bundle install deploy dmg clean
 
@@ -24,7 +24,6 @@ bundle: build
 	@mkdir -p $(APP_BUNDLE)/Contents/Resources
 	@cp $(BINARY) $(APP_BUNDLE)/Contents/MacOS/$(APP_NAME)
 	@cp Sources/Info.plist $(APP_BUNDLE)/Contents/Info.plist
-	@cp Sources/Resources/logi-logo.png $(APP_BUNDLE)/Contents/Resources/logi-logo.png
 	@cp Sources/Resources/AppIcon.icns $(APP_BUNDLE)/Contents/Resources/AppIcon.icns
 	@# Generate PkgInfo
 	@echo "APPL????" > $(APP_BUNDLE)/Contents/PkgInfo

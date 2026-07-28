@@ -11,16 +11,9 @@ struct MXControlApp: App {
     @NSApplicationDelegateAdaptor(AppVisibilityController.self) private var appVisibilityController
     @AppStorage(AppVisibilityPreferences.hideFromDockKey) private var hideFromDock = AppVisibilityPreferences.defaultHideFromDock
 
-    /// Menu bar icon loaded from bundle Resources as a template image.
+    /// Menu bar icon provided by macOS.
     private static let menuBarIcon: NSImage = {
-        let img: NSImage
-        if let url = Bundle.main.url(forResource: "logi-logo", withExtension: "png"),
-           let loaded = NSImage(contentsOf: url) {
-            img = loaded
-        } else {
-            // Fallback to SF Symbol if resource not found
-            img = NSImage(systemSymbolName: "computermouse.fill", accessibilityDescription: "MXControl") ?? NSImage()
-        }
+        let img = NSImage(systemSymbolName: "computermouse.fill", accessibilityDescription: "MXControl") ?? NSImage()
         img.isTemplate = true
         img.size = NSSize(width: 18, height: 18)
         return img
@@ -71,7 +64,7 @@ struct MenuBarView: View {
 
     private var activeBLEDevice: BLEDeviceInfo? {
         guard case .ble(let id) = destination else { return nil }
-        return deviceManager.bleDevices.first { $0.peripheralId == id }
+        return deviceManager.standaloneBLEDevices.first { $0.peripheralId == id }
     }
 
     private var showsDetailActions: Bool {
@@ -79,18 +72,12 @@ struct MenuBarView: View {
     }
 
     private var footerActionTitle: String {
-        showsDetailActions ? "Refresh" : "Rescan"
+        showsDetailActions ? "刷新" : "重新扫描"
     }
 
-    /// Header icon loaded from bundle Resources as a template image.
+    /// Header icon provided by macOS.
     private static let headerIcon: NSImage = {
-        let img: NSImage
-        if let url = Bundle.main.url(forResource: "logi-logo", withExtension: "png"),
-           let loaded = NSImage(contentsOf: url) {
-            img = loaded
-        } else {
-            img = NSImage(systemSymbolName: "computermouse.fill", accessibilityDescription: "MXControl") ?? NSImage()
-        }
+        let img = NSImage(systemSymbolName: "computermouse.fill", accessibilityDescription: "MXControl") ?? NSImage()
         img.isTemplate = true
         img.size = NSSize(width: 14, height: 14)
         return img
@@ -127,7 +114,7 @@ struct MenuBarView: View {
                 destination = .root
             }
         }
-        .onChange(of: deviceManager.bleDevices.map(\.peripheralId)) { _, currentIds in
+        .onChange(of: deviceManager.standaloneBLEDevices.map(\.peripheralId)) { _, currentIds in
             if case .ble(let id) = destination, !currentIds.contains(id) {
                 destination = .root
             }
@@ -154,7 +141,7 @@ struct MenuBarView: View {
     @ViewBuilder
     private var navContent: some View {
         if let device = activeDevice {
-            DeviceDetailView(device: device)
+            DeviceDetailView(device: device, bleInfo: deviceManager.bleInfo(for: device))
         } else if let bleDevice = activeBLEDevice {
             BLEDeviceDetailView(info: bleDevice)
         } else if destination == .general {
@@ -171,7 +158,7 @@ struct MenuBarView: View {
 
     @ViewBuilder
     private var deviceListContent: some View {
-        if deviceManager.devices.isEmpty && deviceManager.bleDevices.isEmpty {
+        if deviceManager.devices.isEmpty && deviceManager.standaloneBLEDevices.isEmpty {
             // Empty state — context-aware guidance
             VStack(spacing: 8) {
                 if deviceManager.statusMessage.contains("Input Monitoring") {
@@ -180,10 +167,10 @@ struct MenuBarView: View {
                         .font(.system(size: 26))
                         .foregroundStyle(.orange)
 
-                    Text("Permission Required")
+                    Text("需要权限")
                         .font(.system(size: 13, weight: .medium))
 
-                    Text("MXControl needs Input Monitoring access.\nGrant it in System Settings > Privacy\n& Security > Input Monitoring.")
+                    Text("MXControl 需要“输入监控”权限。\n请前往“系统设置”>“隐私与安全性”\n>“输入监控”中授权。")
                         .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
                         .multilineTextAlignment(.center)
@@ -193,7 +180,7 @@ struct MenuBarView: View {
                             NSWorkspace.shared.open(url)
                         }
                     } label: {
-                        Text("Open System Settings")
+                        Text("打开系统设置")
                             .font(.system(size: 11))
                     }
                     .buttonStyle(.bordered)
@@ -208,10 +195,10 @@ struct MenuBarView: View {
                         .font(.system(size: 26))
                         .foregroundStyle(.orange)
 
-                    Text("BLE Access Restricted")
+                    Text("蓝牙访问受限")
                         .font(.system(size: 13, weight: .medium))
 
-                    Text("macOS is blocking direct BLE HID access.\nConnect via USB Bolt receiver instead,\nor quit Logi Options+ and retry.")
+                    Text("macOS 阻止了直接访问蓝牙 HID。\n请改用 USB Bolt 接收器，\n或退出 Logi Options+ 后重试。")
                         .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
                         .multilineTextAlignment(.center)
@@ -224,20 +211,18 @@ struct MenuBarView: View {
                         .font(.system(size: 26))
                         .foregroundStyle(.secondary)
 
-                    Text("No Devices Found")
+                    Text("未找到设备")
                         .font(.system(size: 13, weight: .medium))
 
-                    Text("Connect a Logi Bolt receiver via USB\nor pair a device via Bluetooth")
+                    Text("请连接 Logi Bolt USB 接收器，\n或通过蓝牙配对设备")
                         .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
                         .multilineTextAlignment(.center)
 
                     Button {
-                        deviceManager.stopDiscovery()
-                        deviceManager.devices.removeAll()
-                        deviceManager.startDiscovery()
+                        Task { await deviceManager.restartDiscovery() }
                     } label: {
-                        Text("Scan for Devices")
+                        Text("扫描设备")
                             .font(.system(size: 11))
                     }
                     .buttonStyle(.bordered)
@@ -258,14 +243,15 @@ struct MenuBarView: View {
                     }
                     DeviceRowView(
                         device: device,
-                        transportType: deviceManager.transportType(for: device)
+                        transportType: deviceManager.transportType(for: device),
+                        bleBatteryLevel: deviceManager.bleInfo(for: device)?.batteryLevel
                     ) {
                         destination = .device(device.id)
                     }
                 }
 
                 // BLE-only devices (battery + info only)
-                ForEach(Array(deviceManager.bleDevices.enumerated()), id: \.element.peripheralId) { index, bleDevice in
+                ForEach(Array(deviceManager.standaloneBLEDevices.enumerated()), id: \.element.peripheralId) { index, bleDevice in
                     if !deviceManager.devices.isEmpty || index > 0 {
                         Divider()
                             .padding(.horizontal, 12)
@@ -282,11 +268,9 @@ struct MenuBarView: View {
 
     private var retryButton: some View {
         Button {
-            deviceManager.stopDiscovery()
-            deviceManager.devices.removeAll()
-            deviceManager.startDiscovery()
+            Task { await deviceManager.restartDiscovery() }
         } label: {
-            Text("Retry")
+            Text("重试")
                 .font(.system(size: 11))
         }
         .buttonStyle(.bordered)
@@ -324,10 +308,9 @@ struct MenuBarView: View {
             Spacer()
 
             Button {
-                deviceManager.stopDiscovery()
                 NSApplication.shared.terminate(nil)
             } label: {
-                Label("Quit", systemImage: "power")
+                Label("退出", systemImage: "power")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
@@ -364,7 +347,7 @@ struct MenuBarView: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .help("General Settings")
+            .help("通用设置")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -382,7 +365,7 @@ struct MenuBarView: View {
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
 
-            Text("General")
+            Text("通用设置")
                 .font(.system(size: 13, weight: .medium))
                 .lineLimit(1)
         }
@@ -459,7 +442,7 @@ struct MenuBarView: View {
             HStack(spacing: 3) {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 11, weight: .semibold))
-                Text("Back")
+                Text("返回")
                     .font(.system(size: 12))
             }
             .foregroundStyle(.secondary)
@@ -468,9 +451,7 @@ struct MenuBarView: View {
     }
 
     private func rescanDevices() {
-        deviceManager.stopDiscovery()
-        deviceManager.devices.removeAll()
-        deviceManager.startDiscovery()
+        Task { await deviceManager.restartDiscovery() }
     }
 
     private func iconForDevice(_ device: LogiDevice) -> String {
@@ -495,6 +476,7 @@ struct MenuBarView: View {
 struct DeviceRowView: View {
     let device: LogiDevice
     var transportType: TransportType?
+    var bleBatteryLevel: Int?
     var onTap: () -> Void
 
     @State private var isHovered = false
@@ -530,9 +512,17 @@ struct DeviceRowView: View {
 
             // Battery indicator
             if let mouse = device as? MouseDevice {
-                BatteryIndicator(level: mouse.batteryLevel, isCharging: mouse.batteryCharging)
+                BatteryIndicator(
+                    level: bleBatteryLevel ?? mouse.batteryLevel,
+                    isCharging: mouse.batteryCharging
+                )
+                .fixedSize()
             } else if let keyboard = device as? KeyboardDevice {
-                BatteryIndicator(level: keyboard.batteryLevel, isCharging: keyboard.batteryCharging)
+                BatteryIndicator(
+                    level: bleBatteryLevel ?? keyboard.batteryLevel,
+                    isCharging: keyboard.batteryCharging
+                )
+                .fixedSize()
             }
 
             Image(systemName: "chevron.right")
@@ -631,7 +621,7 @@ struct BLEDeviceDetailView: View {
             if let battery = info.batteryLevel {
                     VStack(spacing: 6) {
                         HStack {
-                            Text("Battery")
+                            Text("电量")
                                 .font(.system(size: 12, weight: .medium))
                             Spacer()
                             BatteryIndicator(level: battery, isCharging: false)
@@ -643,20 +633,7 @@ struct BLEDeviceDetailView: View {
                 Divider().padding(.horizontal, 12)
 
                 // Device Information
-                VStack(spacing: 6) {
-                    if let manufacturer = info.manufacturer {
-                        infoRow(label: "Manufacturer", value: manufacturer)
-                    }
-                    if let model = info.modelNumber {
-                        infoRow(label: "Model", value: model)
-                    }
-                    if let firmware = info.firmwareRevision {
-                        infoRow(label: "Firmware", value: firmware)
-                    }
-                    if let serial = info.serialNumber {
-                        infoRow(label: "Serial", value: serial)
-                    }
-                }
+                BLEDeviceInfoRows(info: info)
                 .padding(.horizontal, 12)
 
                 Divider().padding(.horizontal, 12)
@@ -667,7 +644,7 @@ struct BLEDeviceDetailView: View {
                         Image(systemName: "antenna.radiowaves.left.and.right")
                             .font(.system(size: 11))
                             .foregroundStyle(.blue)
-                        Text("Connected via Bluetooth LE")
+                        Text("已通过低功耗蓝牙连接")
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                         Spacer()
@@ -677,7 +654,7 @@ struct BLEDeviceDetailView: View {
                         Image(systemName: "info.circle")
                             .font(.system(size: 11))
                             .foregroundStyle(.orange)
-                        Text("Connect via USB Bolt receiver for full control (DPI, SmartShift, backlight, etc.)")
+                        Text("连接 USB Bolt 接收器可使用完整控制功能（DPI、SmartShift、背光等）")
                             .font(.system(size: 11))
                             .foregroundStyle(.tertiary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -686,6 +663,28 @@ struct BLEDeviceDetailView: View {
                 .padding(.horizontal, 12)
             }
         .padding(.vertical, 10)
+    }
+
+}
+
+struct BLEDeviceInfoRows: View {
+    let info: BLEDeviceInfo
+
+    var body: some View {
+        VStack(spacing: 6) {
+            if let manufacturer = info.manufacturer {
+                infoRow(label: "制造商", value: manufacturer)
+            }
+            if let model = info.modelNumber {
+                infoRow(label: "型号", value: model)
+            }
+            if let firmware = info.firmwareRevision {
+                infoRow(label: "固件", value: firmware)
+            }
+            if let serial = info.serialNumber {
+                infoRow(label: "序列号", value: serial)
+            }
+        }
     }
 
     private func infoRow(label: String, value: String) -> some View {

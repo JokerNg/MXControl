@@ -20,7 +20,7 @@ enum HostsInfoFeature {
 
         var description: String {
             switch self {
-            case .unknown: return "Unknown"
+            case .unknown: return "未知"
             case .bluetooth: return "Bluetooth"
             case .blePro: return "Bolt"
             case .usb: return "USB"
@@ -42,7 +42,7 @@ enum HostsInfoFeature {
 
         var description: String {
             switch self {
-            case .unknown: return "Unknown"
+            case .unknown: return "未知"
             case .windows: return "Windows"
             case .winEmb: return "Windows Embedded"
             case .linux: return "Linux"
@@ -192,7 +192,7 @@ enum HostsInfoFeature {
 
             hosts.append(HostEntry(
                 index: i,
-                name: name.isEmpty ? "Host \(i + 1)" : name,
+                name: name.isEmpty ? "主机 \(i + 1)" : name,
                 busType: info.busType,
                 osType: info.osType,
                 isPaired: info.isPaired

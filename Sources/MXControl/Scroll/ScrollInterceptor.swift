@@ -89,6 +89,22 @@ final class ScrollInterceptor: @unchecked Sendable {
         set { flagLock.withLock { _hiResPixelsPerTick = newValue } }
     }
 
+    /// Direction selected in MXControl. HID++ target mode bypasses macOS's native
+    /// scroll-direction handling, so synthetic events must apply it here.
+    private var _naturalScrolling = true
+    var naturalScrolling: Bool {
+        get { flagLock.withLock { _naturalScrolling } }
+        set { flagLock.withLock { _naturalScrolling = newValue } }
+    }
+
+    /// macOS also reverses native HID scroll events. Device-side inversion must
+    /// compensate for this, while HID++ target-mode events bypass it.
+    private var _systemNaturalScrolling = true
+    var systemNaturalScrolling: Bool {
+        get { flagLock.withLock { _systemNaturalScrolling } }
+        set { flagLock.withLock { _systemNaturalScrolling = newValue } }
+    }
+
     // MARK: - Hi-Res Scroll Acceleration
 
     /// Fixed-size ring buffer for tracking scroll event timestamps (acceleration calculation).
@@ -99,10 +115,6 @@ final class ScrollInterceptor: @unchecked Sendable {
     private var ringCount: Int = 0
     /// Acceleration window in nanoseconds (100ms). Events older than this are pruned.
     private let accelerationWindow: UInt64 = 100_000_000
-
-    /// Cached macOS "Natural Scrolling" preference. Updated via DistributedNotificationCenter
-    /// to avoid hitting UserDefaults on every scroll event.
-    private var _isNaturalScroll: Bool = true
 
     /// Fast-path handler for hi-res scroll data. Called directly from the transport
     /// thread (IOKit input report callback) to avoid @MainActor scheduling latency.
@@ -133,11 +145,20 @@ final class ScrollInterceptor: @unchecked Sendable {
         //               Use line-based pixel conversion, don't divide by multiplier.
         // hiRes=true  → delta is in hi-res ticks (free-spin, many per notch).
         //               Use tick-based conversion (already divided by multiplier).
-        let ppt = flagLock.withLock { _hiResPixelsPerTick }
+        let (ppt, naturalScrolling) = flagLock.withLock {
+            (_hiResPixelsPerTick, _naturalScrolling)
+        }
         let basePx = hiRes ? ppt : 30.0
 
-        let scrollY = Double(deltaV) * basePx * acceleration * (_isNaturalScroll ? -1.0 : 1.0)
+        let scrollY = Self.applyDirection(
+            Double(deltaV) * basePx * acceleration,
+            naturalScrolling: naturalScrolling
+        )
         smoother.accumulate(deltaY: scrollY, deltaX: 0)
+    }
+
+    static func applyDirection(_ delta: Double, naturalScrolling: Bool) -> Double {
+        naturalScrolling ? -delta : delta
     }
 
     // MARK: - Marker to Identify Synthetic Events
@@ -149,15 +170,17 @@ final class ScrollInterceptor: @unchecked Sendable {
     // MARK: - Init
 
     private init() {
-        // Cache macOS natural scrolling preference and observe changes.
-        // Avoids hitting UserDefaults on every scroll event (hundreds/sec in free-spin).
-        _isNaturalScroll = UserDefaults.standard.bool(forKey: "com.apple.swipescrolldirection")
+        _systemNaturalScrolling = UserDefaults.standard.bool(
+            forKey: "com.apple.swipescrolldirection"
+        )
         DistributedNotificationCenter.default().addObserver(
             forName: .init("SwipeScrollDirectionDidChangeNotification"),
             object: nil,
             queue: nil
         ) { [weak self] _ in
-            self?._isNaturalScroll = UserDefaults.standard.bool(forKey: "com.apple.swipescrolldirection")
+            self?.systemNaturalScrolling = UserDefaults.standard.bool(
+                forKey: "com.apple.swipescrolldirection"
+            )
         }
     }
 

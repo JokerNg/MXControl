@@ -58,6 +58,79 @@ enum MacActions {
         postCommandShortcut(keyCode: 0x1E, label: "Forward")  // kVK_ANSI_RightBracket
     }
 
+    /// Post a middle mouse click at the current pointer location.
+    static func middleClick() {
+        guard AXIsProcessTrusted() else {
+            debugLog("[MacActions] ERROR: Not trusted for accessibility")
+            return
+        }
+
+        guard let source = CGEventSource(stateID: .privateState),
+              let location = CGEvent(source: nil)?.location,
+              let mouseDown = CGEvent(
+                  mouseEventSource: source,
+                  mouseType: .otherMouseDown,
+                  mouseCursorPosition: location,
+                  mouseButton: .center
+              ),
+              let mouseUp = CGEvent(
+                  mouseEventSource: source,
+                  mouseType: .otherMouseUp,
+                  mouseCursorPosition: location,
+                  mouseButton: .center
+              )
+        else {
+            debugLog("[MacActions] ERROR: Failed to create middle-click events")
+            return
+        }
+
+        mouseDown.post(tap: .cghidEventTap)
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(20)) {
+            mouseUp.post(tap: .cghidEventTap)
+        }
+    }
+
+    /// Trigger Show Desktop using the default Fn+F11 shortcut.
+    static func showDesktop() {
+        postShortcut(
+            keyCode: 0x67,  // kVK_F11
+            flags: CGEventFlags(rawValue: 0x800000),
+            label: "Show Desktop"
+        )
+    }
+
+    static func switchApplication() {
+        postCommandShortcut(keyCode: 0x30, label: "Switch Application")  // kVK_Tab
+    }
+
+    static func closeWindow() {
+        postCommandShortcut(keyCode: 0x0D, label: "Close Window")  // kVK_ANSI_W
+    }
+
+    static func copy() {
+        postCommandShortcut(keyCode: 0x08, label: "Copy")  // kVK_ANSI_C
+    }
+
+    static func paste() {
+        postCommandShortcut(keyCode: 0x09, label: "Paste")  // kVK_ANSI_V
+    }
+
+    static func playPause() {
+        postMediaKey(16, label: "Play/Pause")  // NX_KEYTYPE_PLAY
+    }
+
+    static func mute() {
+        postMediaKey(7, label: "Mute")  // NX_KEYTYPE_MUTE
+    }
+
+    static func volumeDown() {
+        postMediaKey(1, label: "Volume Down")  // NX_KEYTYPE_SOUND_DOWN
+    }
+
+    static func volumeUp() {
+        postMediaKey(0, label: "Volume Up")  // NX_KEYTYPE_SOUND_UP
+    }
+
     // MARK: - Cooldown Helper
 
     /// Post a keyboard shortcut, respecting the workspace switch cooldown.
@@ -111,6 +184,14 @@ enum MacActions {
     }
 
     private static func postCommandShortcut(keyCode: CGKeyCode, label: String) {
+        postShortcut(keyCode: keyCode, flags: commandModifier, label: label)
+    }
+
+    private static func postShortcut(
+        keyCode: CGKeyCode,
+        flags: CGEventFlags,
+        label: String
+    ) {
         guard AXIsProcessTrusted() else {
             debugLog("[MacActions] ERROR: Not trusted for accessibility")
             return
@@ -128,8 +209,8 @@ enum MacActions {
             return
         }
 
-        keyDown.flags = commandModifier
-        keyUp.flags = commandModifier
+        keyDown.flags = flags
+        keyUp.flags = flags
 
         let bundle = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "unknown"
         debugLog("[MacActions] \(label) triggered (frontmost=\(bundle))")
@@ -137,6 +218,48 @@ enum MacActions {
         keyDown.post(tap: .cghidEventTap)
         DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(20)) {
             keyUp.post(tap: .cghidEventTap)
+        }
+    }
+
+    private static func postMediaKey(_ key: Int, label: String) {
+        guard AXIsProcessTrusted() else {
+            debugLog("[MacActions] ERROR: Not trusted for accessibility")
+            return
+        }
+
+        let keyDownData = (key << 16) | (0xA << 8)
+        let keyUpData = (key << 16) | (0xB << 8)
+        let keyDown = NSEvent.otherEvent(
+            with: .systemDefined,
+            location: .zero,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            subtype: 8,
+            data1: keyDownData,
+            data2: -1
+        )
+        let keyUp = NSEvent.otherEvent(
+            with: .systemDefined,
+            location: .zero,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            subtype: 8,
+            data1: keyUpData,
+            data2: -1
+        )
+
+        guard let downEvent = keyDown?.cgEvent, let upEvent = keyUp?.cgEvent else {
+            debugLog("[MacActions] ERROR: Failed to create \(label) media-key events")
+            return
+        }
+
+        downEvent.post(tap: .cghidEventTap)
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(20)) {
+            upEvent.post(tap: .cghidEventTap)
         }
     }
 

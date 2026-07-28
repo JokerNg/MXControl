@@ -55,7 +55,7 @@ final class MouseDevice: LogiDevice, @unchecked Sendable {
     var buttons: [SpecialKeysFeature.ControlInfo] = []
     /// Per-button remap targets: CID -> remapped target CID (0 = default).
     var buttonRemaps: [UInt16: UInt16] = [:]
-    /// Software actions for the diverted Back/Forward side buttons.
+    /// Software actions for diverted configurable mouse buttons.
     var sideButtonActions: [UInt16: ButtonAction] = [:]
     /// Last pressed diverted CIDs from SpecialKeys event 0, for press-edge detection.
     private var lastPressedDivertedCIDs: Set<UInt16> = []
@@ -457,8 +457,8 @@ final class MouseDevice: LogiDevice, @unchecked Sendable {
         // Divert thumb button (CID 0x00C3) for gesture recognition
         await setupThumbButtonGesture(featureIndex: idx)
 
-        // Divert side buttons (CID 0x0053/0x0056) for global software back/forward fallback.
-        await setupSideButtonFallback(featureIndex: idx)
+        // Divert configurable buttons for global software actions.
+        await setupConfigurableButtons(featureIndex: idx)
     }
 
     /// Divert the thumb/gesture button (CID 0x00C3) and set up the gesture engine.
@@ -506,24 +506,24 @@ final class MouseDevice: LogiDevice, @unchecked Sendable {
         }
     }
 
-    /// Divert side buttons (Back/Forward) so we can post app-level navigation shortcuts.
-    private func setupSideButtonFallback(featureIndex: UInt8) async {
-        // Side-button fallback also posts CGEvents, so request accessibility here too.
+    /// Divert Middle/Back/Forward so they can execute global software actions.
+    private func setupConfigurableButtons(featureIndex: UInt8) async {
         MacActions.requestAccessibilityPermission()
 
-        await divertSideButton(
-            controlId: SpecialKeysFeature.KnownCID.backButton.rawValue,
-            label: "Back",
-            featureIndex: featureIndex
-        )
-        await divertSideButton(
-            controlId: SpecialKeysFeature.KnownCID.forwardButton.rawValue,
-            label: "Forward",
-            featureIndex: featureIndex
-        )
+        for (control, label) in [
+            (SpecialKeysFeature.KnownCID.middleButton, "Middle"),
+            (SpecialKeysFeature.KnownCID.backButton, "Back"),
+            (SpecialKeysFeature.KnownCID.forwardButton, "Forward"),
+        ] {
+            await divertConfigurableButton(
+                controlId: control.rawValue,
+                label: label,
+                featureIndex: featureIndex
+            )
+        }
     }
 
-    private func divertSideButton(controlId: UInt16, label: String, featureIndex: UInt8) async {
+    private func divertConfigurableButton(controlId: UInt16, label: String, featureIndex: UInt8) async {
         guard let button = buttons.first(where: { $0.controlId == controlId }) else {
             debugLog("[MouseDevice] \(label) button CID 0x\(String(format: "%04X", controlId)) not found in controls")
             return
@@ -549,7 +549,7 @@ final class MouseDevice: LogiDevice, @unchecked Sendable {
                 remapTarget: preservedRemap
             )
             debugLog("[MouseDevice] \(label) button diverted (persist=false remap=\(preservedRemap))")
-            logger.info("[MouseDevice] \(label) side-button fallback armed")
+            logger.info("[MouseDevice] \(label) configurable button armed")
         } catch {
             debugLog("[MouseDevice] Failed to divert \(label) button: \(error)")
             logger.warning("[MouseDevice] Failed to divert \(label) button: \(error.localizedDescription)")
@@ -794,7 +794,12 @@ final class MouseDevice: LogiDevice, @unchecked Sendable {
     }
 
     private func defaultSideButtonAction(for controlId: UInt16) -> ButtonAction {
-        controlId == SpecialKeysFeature.KnownCID.backButton.rawValue ? .back : .forward
+        switch SpecialKeysFeature.KnownCID(rawValue: controlId) {
+        case .middleButton: return .middleClick
+        case .backButton: return .back
+        case .forwardButton: return .forward
+        default: return .doNothing
+        }
     }
 
     private func performSideButtonAction(for controlId: UInt16) {
@@ -805,13 +810,37 @@ final class MouseDevice: LogiDevice, @unchecked Sendable {
             MacActions.navigateBack()
         case .forward:
             MacActions.navigateForward()
+        case .middleClick:
+            MacActions.middleClick()
         case .previousDesktop:
             MacActions.workspaceLeft()
         case .nextDesktop:
             MacActions.workspaceRight()
+        case .missionControl:
+            MacActions.missionControl()
+        case .appExpose:
+            MacActions.appExpose()
+        case .showDesktop:
+            MacActions.showDesktop()
+        case .appSwitcher:
+            MacActions.switchApplication()
+        case .closeWindow:
+            MacActions.closeWindow()
+        case .copy:
+            MacActions.copy()
+        case .paste:
+            MacActions.paste()
+        case .playPause:
+            MacActions.playPause()
+        case .mute:
+            MacActions.mute()
+        case .volumeDown:
+            MacActions.volumeDown()
+        case .volumeUp:
+            MacActions.volumeUp()
         case .doNothing:
             break
-        default:
+        case .gestureButton, .smartShiftToggle:
             break
         }
     }
@@ -829,8 +858,8 @@ final class MouseDevice: LogiDevice, @unchecked Sendable {
         }
 
         await rearmThumbGestureButton(featureIndex: skIdx)
-        // Re-arm side-button fallback independently, even if thumb re-arm fails.
-        await setupSideButtonFallback(featureIndex: skIdx)
+        // Re-arm configurable buttons independently, even if thumb re-arm fails.
+        await setupConfigurableButtons(featureIndex: skIdx)
     }
 
     private func rearmThumbGestureButton(featureIndex: UInt8) async {
@@ -912,6 +941,9 @@ final class MouseDevice: LogiDevice, @unchecked Sendable {
             let newlyPressed = currentPressed.subtracting(lastPressedDivertedCIDs)
             lastPressedDivertedCIDs = currentPressed
 
+            if newlyPressed.contains(SpecialKeysFeature.KnownCID.middleButton.rawValue) {
+                performSideButtonAction(for: SpecialKeysFeature.KnownCID.middleButton.rawValue)
+            }
             if newlyPressed.contains(SpecialKeysFeature.KnownCID.backButton.rawValue) {
                 performSideButtonAction(for: SpecialKeysFeature.KnownCID.backButton.rawValue)
             }

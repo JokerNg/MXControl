@@ -12,12 +12,40 @@ enum ButtonAction: String, Hashable, CaseIterable, CustomStringConvertible, Send
     case forward
     case previousDesktop
     case nextDesktop
+    case missionControl
+    case appExpose
+    case showDesktop
+    case appSwitcher
+    case closeWindow
+    case copy
+    case paste
+    case playPause
+    case mute
+    case volumeDown
+    case volumeUp
     case gestureButton
     case smartShiftToggle
     case doNothing
 
-    static let sideButtonActions: [ButtonAction] = [
-        .defaultAction, .back, .forward, .previousDesktop, .nextDesktop, .doNothing,
+    static let configurableButtonActions: [ButtonAction] = [
+        .defaultAction,
+        .middleClick,
+        .back,
+        .forward,
+        .previousDesktop,
+        .nextDesktop,
+        .missionControl,
+        .appExpose,
+        .showDesktop,
+        .appSwitcher,
+        .closeWindow,
+        .copy,
+        .paste,
+        .playPause,
+        .mute,
+        .volumeDown,
+        .volumeUp,
+        .doNothing,
     ]
 
     /// The CID to send as remap target (0 = restore default).
@@ -27,7 +55,11 @@ enum ButtonAction: String, Hashable, CaseIterable, CustomStringConvertible, Send
         case .middleClick: return 82
         case .back: return 83
         case .forward: return 86
-        case .previousDesktop, .nextDesktop: return 0
+        case .previousDesktop, .nextDesktop,
+             .missionControl, .appExpose, .showDesktop, .appSwitcher,
+             .closeWindow, .copy, .paste,
+             .playPause, .mute, .volumeDown, .volumeUp:
+            return 0
         case .gestureButton: return 195
         case .smartShiftToggle: return 196
         case .doNothing: return 0   // Divert + no handler = do nothing
@@ -36,7 +68,12 @@ enum ButtonAction: String, Hashable, CaseIterable, CustomStringConvertible, Send
 
     /// Whether this action requires diverting the button to software.
     var requiresDivert: Bool {
-        self == .doNothing || self == .previousDesktop || self == .nextDesktop
+        switch self {
+        case .defaultAction, .gestureButton, .smartShiftToggle:
+            return false
+        default:
+            return true
+        }
     }
 
     var description: String {
@@ -52,6 +89,17 @@ enum ButtonAction: String, Hashable, CaseIterable, CustomStringConvertible, Send
         case .forward: return "前进"
         case .previousDesktop: return "上一个桌面"
         case .nextDesktop: return "下一个桌面"
+        case .missionControl: return "调度中心"
+        case .appExpose: return "App Exposé"
+        case .showDesktop: return "显示桌面"
+        case .appSwitcher: return "切换应用"
+        case .closeWindow: return "关闭窗口"
+        case .copy: return "复制"
+        case .paste: return "粘贴"
+        case .playPause: return "播放/暂停"
+        case .mute: return "静音"
+        case .volumeDown: return "降低音量"
+        case .volumeUp: return "提高音量"
         case .gestureButton: return "手势"
         case .smartShiftToggle: return "SmartShift"
         case .doNothing: return "无操作"
@@ -67,6 +115,17 @@ enum ButtonAction: String, Hashable, CaseIterable, CustomStringConvertible, Send
         case .forward: return "chevron.right"
         case .previousDesktop: return "rectangle.leadinghalf.inset.filled.arrow.leading"
         case .nextDesktop: return "rectangle.trailinghalf.inset.filled.arrow.trailing"
+        case .missionControl: return "rectangle.3.group"
+        case .appExpose: return "macwindow.on.rectangle"
+        case .showDesktop: return "macwindow"
+        case .appSwitcher: return "arrow.triangle.2.circlepath"
+        case .closeWindow: return "xmark.rectangle"
+        case .copy: return "doc.on.doc"
+        case .paste: return "doc.on.clipboard"
+        case .playPause: return "playpause"
+        case .mute: return "speaker.slash"
+        case .volumeDown: return "speaker.wave.1"
+        case .volumeUp: return "speaker.wave.3"
         case .gestureButton: return "hand.draw"
         case .smartShiftToggle: return "arrow.up.arrow.down.circle"
         case .doNothing: return "nosign"

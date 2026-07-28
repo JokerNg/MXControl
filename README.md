@@ -14,7 +14,7 @@
 
 MXControl 使用 Swift 6、SwiftUI、IOKit 和 CoreBluetooth 构建，无第三方运行时依赖。它可以通过 Bolt/Unifying USB 接收器或 macOS 暴露的蓝牙 HID++ 接口控制设备，并在无法取得完整 HID++ 访问时，通过标准 BLE GATT 服务读取电量和设备信息。
 
-这个版本重点完善了原生中文界面、HID++ 高分辨率平滑滚动、鼠标侧键动作、拇指手势、USB/BLE 信息合并、蓝牙重连恢复、按设备保存设置以及低电量通知。
+这个版本重点完善了原生中文界面、HID++ 高分辨率平滑滚动、鼠标按键动作、拇指手势、USB/BLE 信息合并、蓝牙重连恢复、按设备保存设置以及低电量通知。
 
 ### 鼠标功能
 
@@ -40,17 +40,22 @@ MXControl 使用 Swift 6、SwiftUI、IOKit 和 CoreBluetooth 构建，无第三�
 
 关闭应用或重新扫描前，MXControl 会把高分辨率滚轮目标恢复给 macOS，避免退出后滚轮失效。
 
-#### 后退键与前进键
+#### 鼠标按键配置
 
-两个侧键可以分别设置为：
+中键、后退键和前进键可以分别设置为：
 
 | 动作 | 实际行为 |
 |---|---|
-| 默认 | 恢复 MXControl 默认的后退/前进行为 |
+| 默认 | 恢复该按键的默认行为 |
+| 中键 | 模拟中键点击 |
 | 后退 | 向当前应用发送 `Command + [` |
 | 前进 | 向当前应用发送 `Command + ]` |
 | 上一个桌面 | 切换到左侧桌面 |
 | 下一个桌面 | 切换到右侧桌面 |
+| 调度中心 / App Exposé / 显示桌面 | 打开对应的 macOS 窗口管理界面 |
+| 切换应用 / 关闭窗口 | 发送 `Command + Tab` / `Command + W` |
+| 复制 / 粘贴 | 发送 `Command + C` / `Command + V` |
+| 播放/暂停 / 静音 / 降低音量 / 提高音量 | 发送对应的系统媒体键 |
 | 无操作 | 接收按键事件但不执行动作 |
 
 #### 拇指手势按钮
@@ -108,7 +113,7 @@ Easy-Switch 在当前版本中只展示主机信息，不提供切换按钮。
 - 使用稳定设备标识、型号和严格名称匹配合并 USB、IOKit BLE 与 CoreBluetooth 信息
 - CoreBluetooth 扫描窗口为 15 秒，扫描结束后保留已建立连接
 - BLE 断开后请求自动重连
-- BLE HID++ 重新连接后重新启用滚轮目标、拇指手势和侧键接管状态
+- BLE HID++ 重新连接后重新启用滚轮目标、拇指手势和鼠标按键接管状态
 - BLE 接口被其他程序独占时，每 5 秒重试一次，最多持续约 5 分钟
 - 支持手动刷新当前设备和重新扫描全部设备
 
@@ -141,7 +146,7 @@ Easy-Switch 在当前版本中只展示主机信息，不提供切换按钮。
 - CoreBluetooth 本身不能在 macOS 15+ 上作为 HID++ 命令通道
 - Logi Options+ 或其他进程独占 BLE HID 接口时，完整控制可能暂时不可用
 - 拇指手势动作不可自定义，只能调节点击时限和拖动阈值
-- 侧键动作目前只覆盖后退键和前进键
+- 自定义按键动作目前只覆盖中键、后退键和前进键
 - 设备层已实现指针速度读写，但当前界面尚未提供调节入口
 - Easy-Switch 只显示主机信息，不能从应用内切换主机
 - 不支持按应用配置、SmartActions、Flow 或 Logitech 账号
@@ -176,7 +181,7 @@ make dmg SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)"
 首次启动后，请在“系统设置 → 隐私与安全性”中授予：
 
 - **输入监控**：打开 USB/BLE HID++ 设备接口
-- **辅助功能**：发布平滑滚动、手势、桌面切换及侧键动作
+- **辅助功能**：发布平滑滚动、手势、快捷键、媒体键及鼠标按键动作
 - **蓝牙**：通过 CoreBluetooth 读取 BLE 电量和设备信息
 - **通知**：发送低电量提醒
 
@@ -188,7 +193,7 @@ make dmg SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)"
 
 MXControl is built with Swift 6, SwiftUI, IOKit, and CoreBluetooth, with no third-party runtime dependencies. It controls devices through a Bolt/Unifying receiver or the Bluetooth HID++ interface exposed by macOS. When full HID++ access is unavailable, it falls back to standard BLE GATT services for battery and device information.
 
-This fork focuses on a native Chinese interface, HID++ high-resolution smooth scrolling, side-button actions, thumb gestures, USB/BLE metadata merging, BLE reconnect recovery, per-device settings, and low-battery notifications.
+This fork focuses on a native Chinese interface, HID++ high-resolution smooth scrolling, configurable mouse-button actions, thumb gestures, USB/BLE metadata merging, BLE reconnect recovery, per-device settings, and low-battery notifications.
 
 ### Mouse features
 
@@ -214,17 +219,22 @@ The primary tested mouse is the **MX Master 3S**.
 
 Before quitting or rescanning, MXControl returns the high-resolution wheel target to macOS so normal scrolling continues after the app exits.
 
-#### Back and forward buttons
+#### Mouse button configuration
 
-Each side button can be configured independently:
+The middle, Back, and Forward buttons can each be configured independently:
 
 | Action | Behavior |
 |---|---|
-| Default | Restore MXControl's default Back/Forward behavior |
+| Default | Restore the selected button's default behavior |
+| Middle click | Simulate a middle-button click |
 | Back | Send `Command + [` to the frontmost app |
 | Forward | Send `Command + ]` to the frontmost app |
 | Previous desktop | Switch to the workspace on the left |
 | Next desktop | Switch to the workspace on the right |
+| Mission Control / App Exposé / Show Desktop | Open the corresponding macOS window-management view |
+| Switch application / Close window | Send `Command + Tab` / `Command + W` |
+| Copy / Paste | Send `Command + C` / `Command + V` |
+| Play/Pause / Mute / Volume down / Volume up | Send the corresponding system media key |
 | Do nothing | Receive the button event without performing an action |
 
 #### Thumb gesture button
@@ -282,7 +292,7 @@ Additional connection behavior:
 - Merges USB, IOKit BLE, and CoreBluetooth information using stable identity, model, and strict name matching
 - Scans with CoreBluetooth for 15 seconds while keeping established connections alive
 - Requests automatic CoreBluetooth reconnection after disconnects
-- Re-arms scroll targeting, thumb gestures, and side-button diversion after BLE HID++ reconnects
+- Re-arms scroll targeting, thumb gestures, and configurable mouse-button diversion after BLE HID++ reconnects
 - Retries an exclusively locked BLE HID interface every 5 seconds for up to about 5 minutes
 - Supports manual device refresh and full rescanning
 
@@ -315,7 +325,7 @@ Other Logitech HID++ 2.0 devices may be discovered, but available controls depen
 - CoreBluetooth is not an HID++ command channel on macOS 15+
 - Full BLE control may be temporarily unavailable while Logi Options+ or another process owns the HID interface
 - Thumb gesture actions are fixed; only timing and drag threshold are configurable
-- Custom side-button actions currently cover the Back and Forward buttons only
+- Custom actions currently cover the middle, Back, and Forward buttons only
 - Pointer-speed read/write exists in the device layer but is not exposed in the current UI
 - Easy-Switch host information is read-only
 - No per-app profiles, SmartActions, Flow, or Logitech account

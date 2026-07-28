@@ -146,8 +146,8 @@ struct MouseDetailView: View {
                         separator
                     }
 
-                    // Diverted Back/Forward button actions
-                    if hasSideButtons {
+                    // Diverted configurable mouse-button actions
+                    if hasConfigurableButtons {
                         buttonSection
                         separator
                     }
@@ -576,10 +576,13 @@ struct MouseDetailView: View {
 
     // MARK: - Buttons
 
-    private var hasSideButtons: Bool {
+    private var hasConfigurableButtons: Bool {
         mouse.buttons.contains {
-            $0.controlId == SpecialKeysFeature.KnownCID.backButton.rawValue
-                || $0.controlId == SpecialKeysFeature.KnownCID.forwardButton.rawValue
+            $0.isDivertable && (
+                $0.controlId == SpecialKeysFeature.KnownCID.middleButton.rawValue
+                    || $0.controlId == SpecialKeysFeature.KnownCID.backButton.rawValue
+                    || $0.controlId == SpecialKeysFeature.KnownCID.forwardButton.rawValue
+            )
         }
     }
 
@@ -592,11 +595,15 @@ struct MouseDetailView: View {
                 .padding(.top, 10)
                 .padding(.bottom, 2)
 
-            sideButtonPicker(
+            configurableButtonPicker(
+                controlId: SpecialKeysFeature.KnownCID.middleButton.rawValue,
+                name: "中键"
+            )
+            configurableButtonPicker(
                 controlId: SpecialKeysFeature.KnownCID.backButton.rawValue,
                 name: "后退键"
             )
-            sideButtonPicker(
+            configurableButtonPicker(
                 controlId: SpecialKeysFeature.KnownCID.forwardButton.rawValue,
                 name: "前进键"
             )
@@ -605,8 +612,8 @@ struct MouseDetailView: View {
     }
 
     @ViewBuilder
-    private func sideButtonPicker(controlId: UInt16, name: String) -> some View {
-        if mouse.buttons.contains(where: { $0.controlId == controlId }) {
+    private func configurableButtonPicker(controlId: UInt16, name: String) -> some View {
+        if mouse.buttons.contains(where: { $0.controlId == controlId && $0.isDivertable }) {
             ActionPicker(
                 buttonName: name,
                 controlId: controlId,
@@ -614,7 +621,7 @@ struct MouseDetailView: View {
                     get: { mouse.sideButtonAction(for: controlId) },
                     set: { mouse.setSideButtonAction($0, for: controlId) }
                 ),
-                actions: ButtonAction.sideButtonActions
+                actions: ButtonAction.configurableButtonActions
             ) { _ in
                 save()
             }

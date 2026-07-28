@@ -4,11 +4,16 @@ import Testing
 @Suite("Button Actions")
 struct ButtonActionTests {
 
-    @Test func sideButtonDesktopActionsPersistByRawValue() {
+    @Test func configurableButtonActionsPersistByRawValue() {
         #expect(ButtonAction(rawValue: ButtonAction.previousDesktop.rawValue) == .previousDesktop)
         #expect(ButtonAction(rawValue: ButtonAction.nextDesktop.rawValue) == .nextDesktop)
-        #expect(ButtonAction.sideButtonActions.contains(.previousDesktop))
-        #expect(ButtonAction.sideButtonActions.contains(.nextDesktop))
+        #expect(ButtonAction(rawValue: ButtonAction.playPause.rawValue) == .playPause)
+        #expect(ButtonAction.configurableButtonActions.contains(.middleClick))
+        #expect(ButtonAction.configurableButtonActions.contains(.missionControl))
+        #expect(ButtonAction.configurableButtonActions.contains(.copy))
+        #expect(ButtonAction.configurableButtonActions.contains(.volumeUp))
+        #expect(!ButtonAction.configurableButtonActions.contains(.gestureButton))
+        #expect(!ButtonAction.configurableButtonActions.contains(.smartShiftToggle))
     }
 }
 

@@ -1,79 +1,130 @@
 # MXControl
 
-A native macOS menu bar app that controls Logitech MX devices. Built because Logi Options+ is a 500MB Electron app that needs its own login system, phones home constantly, shows you ads for other Logitech products inside a mouse driver, and somehow uses more RAM than Xcode. For a mouse. And a keyboard.
+<p align="center">
+  <a href="#中文">中文</a> · <a href="#english">English</a>
+</p>
 
-MXControl is ~2MB. It talks HID++ 2.0 directly to your devices, scroll data included. Logi Options+ still routes scroll through macOS and calls it a day. No account, no telemetry, no upsell banners, no "SmartActions" nobody asked for.
+<a id="中文"></a>
 
-This entire thing was vibe coded. Claude wrote most of it. I pointed at things and said "fix that" until it worked. If it breaks, that's the risk you accept when a human and an LLM collectively decide they've had enough of Logi Options+.
+## 中文
 
-## What it does
+MXControl 是一款适用于 Logitech MX 设备的轻量级原生 macOS 菜单栏应用。它通过 HID++ 2.0 直接与设备通信，无需账号、遥测服务或常驻的 Electron 后台。
 
-**Mouse (MX Master 3S)**
-- Smooth scroll via HID++ hi-res data (15x resolution, skips the macOS scroll pipeline)
-- Scroll acceleration that actually matches trackpad feel
-- Wheel mode aware: snappy in ratchet, glidy in free-spin, auto-detects SmartShift switches
-- Cmd+scroll zoom works (Figma, Chrome, the usual suspects)
-- SmartShift wheel mode (ratchet/free-spin) with auto-disengage
-- Natural scrolling and thumb wheel inversion
-- Thumb button gestures: click for Mission Control, hold+drag for workspace switching
-- Battery level and charging status
-- Easy-Switch host info
-- Advanced: DPI, SmartShift force, scroll tuning, gesture thresholds
+项目支持 Bolt/Unifying USB 接收器和低功耗蓝牙连接，提供滚轮、SmartShift、DPI、按键、背光、电量及 Easy-Switch 主机信息等常用控制功能。应用使用 SwiftUI 编写，保持原生且轻量。
 
-**Keyboard (MX Keys Mini)**
-- Backlight toggle and brightness
-- Fn key inversion (media keys vs F1-F12)
-- Battery level and charging status
-- Easy-Switch host info
+### 主要功能
 
-**Transport**
-- USB via Bolt/Unifying receiver (auto-probes devices 1-6)
-- Bluetooth Low Energy direct (no receiver needed)
-- Both at the same time, USB preferred when duplicate detected
+**鼠标（MX Master 3S）**
 
-**App**
-- Native SwiftUI menu bar popover
-- Launch at login toggle
-- Settings persist and re-apply on reconnect
-- ~2MB total, runs under 20MB RAM
+- HID++ 高分辨率平滑滚动及滚动加速
+- 棘轮/自由滚动模式和 SmartShift 力度调节
+- DPI、自然滚动和侧边滚轮方向设置
+- 后退/前进键可映射为浏览操作、上一个/下一个桌面或无操作
+- 拇指手势支持调度中心、App Exposé 和桌面切换
+- 电量、充电状态和 Easy-Switch 主机信息
 
-## What it doesn't do
+**键盘（MX Keys Mini）**
 
-- Vertical thumb gestures (up/down not mapped yet)
-- Custom gesture actions (hardcoded to Mission Control and workspace switch)
-- Per-app settings or "SmartActions" (and honestly, good)
-- Flow notifications (you don't need your mouse driver congratulating you)
-- Logitech account login (lol)
+- 背光开关和亮度调节
+- Fn 键模式切换
+- 电量、充电状态和 Easy-Switch 主机信息
 
-## Supported devices
+**连接与应用**
 
-Tested and working:
-- MX Master 3S (mouse, USB + BLE)
-- MX Keys Mini (keyboard, USB + BLE)
+- 同时支持 Bolt/Unifying USB 接收器和低功耗蓝牙
+- 自动合并同一设备的 USB 与蓝牙信息，优先使用 USB 控制
+- 设备重连后自动恢复已保存的设置
+- 原生中文 SwiftUI 菜单栏界面
+- 支持登录时启动，无账号、无遥测
 
-Other Logitech HID++ 2.0 devices connected via a Bolt or Unifying receiver will probably get discovered and show basic info. BLE direct needs the device PID registered in code, so only the two above work wirelessly without a receiver for now.
+### 支持设备
 
-## Install
+已测试：
 
-Grab `MXControl.dmg` from [Releases](https://github.com/wiscaksono/MXControl/releases), open it, drag to Applications.
+- MX Master 3S（USB + BLE）
+- MX Keys Mini（USB + BLE）
 
-Or build it yourself:
+其他通过 Bolt 或 Unifying 接收器连接的 HID++ 2.0 设备可能只能显示基础信息。蓝牙直连需要在代码中登记设备 PID。
 
-```
-git clone https://github.com/wiscaksono/MXControl.git
+### 构建与运行
+
+```bash
+git clone https://github.com/JokerNg/MXControl.git
 cd MXControl
 make dmg
 ```
 
-Needs macOS 15+ and Xcode command line tools. After first launch, go to System Settings and grant:
-- **Input Monitoring** (required for BLE HID device access)
-- **Accessibility** (required for smooth scroll and gesture actions)
+要求：
 
-## Requirements
+- macOS 15.0 或更高版本
+- Xcode Command Line Tools
+- Logitech HID++ 2.0 兼容设备
 
-- macOS 15.0+
-- Logitech MX device with HID++ 2.0 support
-- Bolt/Unifying USB receiver or Bluetooth Low Energy
+首次启动后，请在“系统设置 → 隐私与安全性”中授予：
+
+- **输入监控**：访问蓝牙 HID 设备
+- **辅助功能**：平滑滚动和手势操作
+
+<a id="english"></a>
+
+## English
+
+MXControl is a lightweight native macOS menu bar app for Logitech MX devices. It communicates directly with devices over HID++ 2.0 without requiring an account, telemetry service, or persistent Electron background process.
+
+The app supports Bolt/Unifying USB receivers and Bluetooth Low Energy, with controls for scrolling, SmartShift, DPI, buttons, keyboard backlight, battery status, and Easy-Switch host information. It is built with SwiftUI to remain native and lightweight.
+
+### Features
+
+**Mouse (MX Master 3S)**
+
+- HID++ high-resolution smooth scrolling and acceleration
+- Ratchet/free-spin modes and SmartShift force adjustment
+- DPI, natural scrolling, and thumb-wheel direction settings
+- Back/forward buttons can perform browser navigation, switch desktops, or do nothing
+- Thumb gestures for Mission Control, App Exposé, and desktop switching
+- Battery, charging status, and Easy-Switch host information
+
+**Keyboard (MX Keys Mini)**
+
+- Backlight toggle and brightness
+- Fn key mode
+- Battery, charging status, and Easy-Switch host information
+
+**Transport and app**
+
+- Bolt/Unifying USB receiver and Bluetooth Low Energy support
+- Merges USB and BLE information for the same device while preferring USB control
+- Restores saved settings after reconnecting
+- Native SwiftUI menu bar interface with Chinese localization
+- Launch at login, no account, and no telemetry
+
+### Supported devices
+
+Tested:
+
+- MX Master 3S (USB + BLE)
+- MX Keys Mini (USB + BLE)
+
+Other HID++ 2.0 devices connected through a Bolt or Unifying receiver may expose only basic information. Direct BLE support requires the device PID to be registered in code.
+
+### Build and run
+
+```bash
+git clone https://github.com/JokerNg/MXControl.git
+cd MXControl
+make dmg
+```
+
+Requirements:
+
+- macOS 15.0 or later
+- Xcode Command Line Tools
+- Logitech HID++ 2.0 compatible device
+
+After the first launch, grant the following permissions in System Settings → Privacy & Security:
+
+- **Input Monitoring** for BLE HID device access
+- **Accessibility** for smooth scrolling and gesture actions
 
 ## License
 

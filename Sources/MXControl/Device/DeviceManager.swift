@@ -34,6 +34,8 @@ final class DeviceManager {
 
     private var discoveryTask: Task<Void, Never>?
     private var batteryRefreshTask: Task<Void, Never>?
+    /// Short-lived BLE volatile-state recovery tasks, keyed by device ID.
+    private var volatileRecoveryTasks: [UUID: Task<Void, Never>] = [:]
     /// Guards against multiple probeReceiverDevices() from multiple HID interface matches.
     private var isProbing: Bool = false
 
@@ -189,6 +191,11 @@ final class DeviceManager {
         discoveryTask?.cancel()
         discoveryTask = nil
         stopBatteryRefresh()
+
+        for task in volatileRecoveryTasks.values {
+            task.cancel()
+        }
+        volatileRecoveryTasks.removeAll()
 
         transport?.close()
         transport = nil
@@ -586,6 +593,8 @@ final class DeviceManager {
         case .ble:
             // BLE device removed — remove just that device
             if let deviceId = uidToDeviceId[info.uid] {
+                volatileRecoveryTasks[deviceId]?.cancel()
+                volatileRecoveryTasks.removeValue(forKey: deviceId)
                 devices.removeAll { $0.id == deviceId }
                 deviceTransportType.removeValue(forKey: deviceId)
                 deviceIdToUID.removeValue(forKey: deviceId)
@@ -623,12 +632,70 @@ final class DeviceManager {
         debugLog("[DeviceManager] BLE reconnected for \(mouse.name) — re-arming volatile state")
         logger.info("[DeviceManager] BLE device \(mouse.name, privacy: .public) reconnected — re-arming divert + scroll target")
 
-        Task {
-            await mouse.rearmThumbDivert()
-            // Re-arm HID++ scroll target mode (volatile flag lost during BLE reconnect)
-            if mouse.smoothScrollEnabled {
-                await mouse.setHiResScrollTarget(true)
+        scheduleBLEVolatileStateRecovery(uid: uid, initialDelay: .zero)
+    }
+
+    /// Re-arm volatile BLE state after macOS wakes from sleep.
+    ///
+    /// A sleep cycle can outlast USBTransport's IOKit re-enumeration debounce,
+    /// so the normal reconnected callback is not guaranteed to run. Existing
+    /// BLE devices are retried for a short bounded window while Bluetooth settles.
+    func recoverBLEDevicesAfterWake() {
+        let uids = devices.compactMap { device -> String? in
+            guard deviceTransportType[device.id] == .ble else { return nil }
+            return deviceIdToUID[device.id]
+        }
+
+        logger.info("[DeviceManager] macOS wake — scheduling BLE volatile state recovery for \(uids.count) device(s)")
+        for uid in uids {
+            scheduleBLEVolatileStateRecovery(uid: uid, initialDelay: .seconds(1))
+        }
+    }
+
+    private func scheduleBLEVolatileStateRecovery(uid: String, initialDelay: Duration) {
+        guard let deviceId = uidToDeviceId[uid],
+              let mouse = devices.first(where: { $0.id == deviceId }) as? MouseDevice else {
+            debugLog("[DeviceManager] BLE volatile recovery skipped for unknown uid=\(uid)")
+            return
+        }
+
+        volatileRecoveryTasks[deviceId]?.cancel()
+        volatileRecoveryTasks[deviceId] = Task { @MainActor [weak self, weak mouse] in
+            do {
+                try await Task.sleep(for: initialDelay)
+            } catch {
+                return
             }
+
+            for attempt in 1...3 {
+                guard !Task.isCancelled, let mouse else { return }
+
+                debugLog("[DeviceManager] BLE volatile recovery attempt \(attempt)/3 for \(mouse.name)")
+                let sideButtonsReady = await mouse.rearmThumbDivert()
+
+                // Re-arm HID++ scroll target mode too; it is another volatile flag.
+                if mouse.smoothScrollEnabled {
+                    await mouse.setHiResScrollTarget(true)
+                }
+
+                if sideButtonsReady {
+                    debugLog("[DeviceManager] BLE volatile recovery succeeded for \(mouse.name)")
+                    break
+                }
+
+                guard attempt < 3 else {
+                    logger.warning("[DeviceManager] BLE volatile recovery exhausted for \(mouse.name, privacy: .public)")
+                    break
+                }
+
+                do {
+                    try await Task.sleep(for: .seconds(1))
+                } catch {
+                    return
+                }
+            }
+
+            self?.volatileRecoveryTasks.removeValue(forKey: deviceId)
         }
     }
 

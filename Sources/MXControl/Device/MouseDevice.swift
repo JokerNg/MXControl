@@ -507,31 +507,35 @@ final class MouseDevice: LogiDevice, @unchecked Sendable {
     }
 
     /// Divert Middle/Back/Forward so they can execute global software actions.
-    private func setupConfigurableButtons(featureIndex: UInt8) async {
+    @discardableResult
+    private func setupConfigurableButtons(featureIndex: UInt8) async -> Bool {
         MacActions.requestAccessibilityPermission()
 
+        var allSucceeded = true
         for (control, label) in [
             (SpecialKeysFeature.KnownCID.middleButton, "Middle"),
             (SpecialKeysFeature.KnownCID.backButton, "Back"),
             (SpecialKeysFeature.KnownCID.forwardButton, "Forward"),
         ] {
-            await divertConfigurableButton(
+            let succeeded = await divertConfigurableButton(
                 controlId: control.rawValue,
                 label: label,
                 featureIndex: featureIndex
             )
+            allSucceeded = succeeded && allSucceeded
         }
+        return allSucceeded
     }
 
-    private func divertConfigurableButton(controlId: UInt16, label: String, featureIndex: UInt8) async {
+    private func divertConfigurableButton(controlId: UInt16, label: String, featureIndex: UInt8) async -> Bool {
         guard let button = buttons.first(where: { $0.controlId == controlId }) else {
             debugLog("[MouseDevice] \(label) button CID 0x\(String(format: "%04X", controlId)) not found in controls")
-            return
+            return true
         }
 
         guard button.isDivertable else {
             logger.info("[MouseDevice] \(label) button is not divertable")
-            return
+            return true
         }
 
         let preservedRemap = buttonRemaps[controlId] ?? 0
@@ -550,9 +554,11 @@ final class MouseDevice: LogiDevice, @unchecked Sendable {
             )
             debugLog("[MouseDevice] \(label) button diverted (persist=false remap=\(preservedRemap))")
             logger.info("[MouseDevice] \(label) configurable button armed")
+            return true
         } catch {
             debugLog("[MouseDevice] Failed to divert \(label) button: \(error)")
             logger.warning("[MouseDevice] Failed to divert \(label) button: \(error.localizedDescription)")
+            return false
         }
     }
 
@@ -851,24 +857,26 @@ final class MouseDevice: LogiDevice, @unchecked Sendable {
     /// Called when the IOHIDDevice pointer changes due to IOKit re-enumeration.
     /// The device firmware may have lost the volatile divert flag during the
     /// BLE connection cycle, so we re-send the setCtrlIdReporting command.
-    func rearmThumbDivert() async {
+    @discardableResult
+    func rearmThumbDivert() async -> Bool {
         guard let skIdx = specialKeysFeatureIndex else {
             debugLog("[MouseDevice] rearmThumbDivert: no specialKeysFeatureIndex cached")
-            return
+            return false
         }
 
-        await rearmThumbGestureButton(featureIndex: skIdx)
+        let thumbSucceeded = await rearmThumbGestureButton(featureIndex: skIdx)
         // Re-arm configurable buttons independently, even if thumb re-arm fails.
-        await setupConfigurableButtons(featureIndex: skIdx)
+        let configurableButtonsSucceeded = await setupConfigurableButtons(featureIndex: skIdx)
+        return thumbSucceeded && configurableButtonsSucceeded
     }
 
-    private func rearmThumbGestureButton(featureIndex: UInt8) async {
+    private func rearmThumbGestureButton(featureIndex: UInt8) async -> Bool {
         let thumbCID: UInt16 = SpecialKeysFeature.KnownCID.gestureButton.rawValue
 
         // Find the thumb button in our cached controls list
         guard let thumbButton = buttons.first(where: { $0.controlId == thumbCID }) else {
             debugLog("[MouseDevice] rearmThumbDivert: thumb button CID 0x\(String(format: "%04X", thumbCID)) not in controls")
-            return
+            return true
         }
 
         let hasRawXY = thumbButton.flags.contains(.rawXY)
@@ -894,9 +902,11 @@ final class MouseDevice: LogiDevice, @unchecked Sendable {
                 gestureEngine = engine
                 debugLog("[MouseDevice] rearmThumbDivert: created new gesture engine")
             }
+            return true
         } catch {
             debugLog("[MouseDevice] rearmThumbDivert: FAILED - \(error)")
             logger.warning("[MouseDevice] Failed to re-arm thumb divert: \(error.localizedDescription)")
+            return false
         }
     }
 

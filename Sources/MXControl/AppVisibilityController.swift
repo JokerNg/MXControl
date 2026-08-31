@@ -31,6 +31,7 @@ final class AppRuntime {
 @MainActor
 final class AppVisibilityController: NSObject, NSApplicationDelegate {
     private let defaults = UserDefaults.standard
+    private var wakeObserver: NSObjectProtocol?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         AppVisibilityPreferences.registerDefaults(defaults)
@@ -39,6 +40,16 @@ final class AppVisibilityController: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Hidden mode is session-only so a fresh app launch always restores the menu bar icon.
         restoreMenuBarIconIfNeeded()
+
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            Task { @MainActor in
+                AppRuntime.shared.deviceManager.recoverBLEDevicesAfterWake()
+            }
+        }
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
@@ -46,6 +57,11 @@ final class AppVisibilityController: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        if let wakeObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver)
+            self.wakeObserver = nil
+        }
+
         // Reset HiResScroll target to HID mode so the scroll wheel works via macOS
         // after the app exits. The target flag is volatile (resets on device reconnect),
         // but we reset explicitly for clean shutdown.

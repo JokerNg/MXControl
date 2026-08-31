@@ -269,7 +269,7 @@ enum SpecialKeysFeature {
         // Packet layout per HID++ 2.0 spec (setCidReporting function 0x03):
         //   [cid_hi, cid_lo, flags1, remapHi, remapLo]
         // This uses a short report (report ID 0x10) — 3 param bytes for flags + remap.
-        let _ = try await transport.send(
+        let _ = try await transport.sendWithRetry(
             deviceIndex: deviceIndex,
             featureIndex: featureIndex,
             functionId: 0x03,
@@ -280,7 +280,9 @@ enum SpecialKeysFeature {
                 flags1,
                 UInt8((remapTarget >> 8) & 0xFF),
                 UInt8(remapTarget & 0xFF),
-            ]
+            ],
+            maxAttempts: 3,
+            retryDelay: .milliseconds(150)
         )
     }
 

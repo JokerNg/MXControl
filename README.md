@@ -70,10 +70,11 @@ MXControl 使用 Swift 6、SwiftUI、IOKit 和 CoreBluetooth 构建，无第三�
 
 可以在高级设置中调节：
 
+- 分别为点击、向左/右/上/下拖动选择预定义动作；“默认”恢复上表映射
 - 点击时限：100–400 ms
 - 拖动阈值：50–500 个原始 HID 单位
 
-手势动作目前是固定映射，不能自定义为任意快捷键。
+手势动作使用现有预定义动作，暂不支持任意快捷键或组合宏。
 
 #### 电量与设备信息
 
@@ -146,8 +147,8 @@ Easy-Switch 在当前版本中只展示主机信息，不提供切换按钮。
 - 只对 MX Master 3、MX Master 3S 和 MX Keys Mini 做过完整验证
 - CoreBluetooth 本身不能在 macOS 15+ 上作为 HID++ 命令通道
 - Logi Options+ 或其他进程独占 BLE HID 接口时，完整控制可能暂时不可用
-- 拇指手势动作不可自定义，只能调节点击时限和拖动阈值
-- 自定义按键动作目前只覆盖中键、后退键和前进键
+- 拇指手势暂不支持任意快捷键或组合宏
+- 自定义动作目前覆盖中键、后退键、前进键和拇指手势
 - 设备层已实现指针速度读写，但当前界面尚未提供调节入口
 - Easy-Switch 只显示主机信息，不能从应用内切换主机
 - 不支持按应用配置、SmartActions、Flow 或 Logitech 账号
@@ -307,10 +308,11 @@ The middle, Back, and Forward buttons can each be configured independently:
 
 Advanced settings expose:
 
+- A predefined action for click and each left/right/up/down drag; “Default” restores the mappings above
 - Click time limit: 100–400 ms
 - Drag threshold: 50–500 raw HID units
 
-Gesture actions are currently fixed; only the timing and movement threshold are configurable.
+Gesture actions use the existing predefined actions; arbitrary shortcuts and macros are not supported yet.
 
 #### Battery and device information
 
@@ -383,8 +385,8 @@ Other Logitech HID++ 2.0 devices may be discovered, but available controls depen
 - Full validation currently covers only the MX Master 3, MX Master 3S, and MX Keys Mini
 - CoreBluetooth is not an HID++ command channel on macOS 15+
 - Full BLE control may be temporarily unavailable while Logi Options+ or another process owns the HID interface
-- Thumb gesture actions are fixed; only timing and drag threshold are configurable
-- Custom actions currently cover the middle, Back, and Forward buttons only
+- Thumb gestures do not support arbitrary shortcuts or macros yet
+- Custom actions currently cover the middle, Back, Forward, and thumb gestures
 - Pointer-speed read/write exists in the device layer but is not exposed in the current UI
 - Easy-Switch host information is read-only
 - No per-app profiles, SmartActions, Flow, or Logitech account

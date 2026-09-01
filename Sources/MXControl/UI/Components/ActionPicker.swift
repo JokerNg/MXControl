@@ -48,6 +48,9 @@ enum ButtonAction: String, Hashable, CaseIterable, CustomStringConvertible, Send
         .doNothing,
     ]
 
+    /// The same predefined software actions are valid for thumb gestures.
+    static let gestureActions = configurableButtonActions
+
     /// The CID to send as remap target (0 = restore default).
     var remapCID: UInt16 {
         switch self {
@@ -146,10 +149,9 @@ enum ButtonAction: String, Hashable, CaseIterable, CustomStringConvertible, Send
     }
 }
 
-/// A compact picker dropdown for remapping a mouse button to a predefined action.
+/// A compact picker dropdown for assigning a predefined action.
 struct ActionPicker: View {
     let buttonName: String
-    let controlId: UInt16
     @Binding var currentAction: ButtonAction
     var actions: [ButtonAction] = ButtonAction.allCases
     var onChanged: ((ButtonAction) -> Void)?

@@ -80,6 +80,7 @@ enum SettingsStore {
         var sideButtonActions: [UInt16: ButtonAction]?
         var gestureClickTimeLimit: Double?   // seconds (click-first time window)
         var gestureDragThreshold: Int?       // raw HID units
+        var gestureActions: [GestureDirection: ButtonAction]?
         var smoothScrollEnabled: Bool?
         var smoothScrollSpeed: Double?       // 1.0 - 10.0
         var smoothScrollMomentum: Double?    // 0.80 - 0.98
@@ -116,6 +117,12 @@ enum SettingsStore {
 
         if let ct = settings.gestureClickTimeLimit { defaults.set(ct, forKey: k("gesture.click_time")) }
         if let dt = settings.gestureDragThreshold { defaults.set(dt, forKey: k("gesture.drag_threshold")) }
+        if let actions = settings.gestureActions {
+            let dict = Dictionary(uniqueKeysWithValues: actions
+                .filter { $0.value != .defaultAction }
+                .map { ($0.key.rawValue, $0.value.rawValue) })
+            defaults.set(dict, forKey: k("gesture.actions"))
+        }
 
         if let ssEnabled = settings.smoothScrollEnabled { defaults.set(ssEnabled, forKey: k("smooth_scroll.enabled")) }
         if let ssSpeed = settings.smoothScrollSpeed { defaults.set(ssSpeed, forKey: k("smooth_scroll.speed")) }
@@ -168,6 +175,17 @@ enum SettingsStore {
         }
         if defaults.object(forKey: k("gesture.drag_threshold")) != nil {
             settings.gestureDragThreshold = defaults.integer(forKey: k("gesture.drag_threshold"))
+        }
+        if let dict = defaults.dictionary(forKey: k("gesture.actions")) as? [String: String] {
+            settings.gestureActions = Dictionary(
+                uniqueKeysWithValues: dict.compactMap { key, value in
+                    guard let direction = GestureDirection(rawValue: key),
+                          let action = ButtonAction(rawValue: value),
+                          ButtonAction.gestureActions.contains(action),
+                          action != .defaultAction else { return nil }
+                    return (direction, action)
+                }
+            )
         }
 
         if defaults.object(forKey: k("smooth_scroll.enabled")) != nil {
@@ -259,6 +277,7 @@ enum SettingsStore {
             sideButtonActions: mouse.sideButtonActions,
             gestureClickTimeLimit: mouse.gestureClickTimeLimit,
             gestureDragThreshold: mouse.gestureDragThreshold,
+            gestureActions: mouse.gestureActions,
             smoothScrollEnabled: mouse.smoothScrollEnabled,
             smoothScrollSpeed: mouse.smoothScrollSpeed,
             smoothScrollMomentum: mouse.smoothScrollMomentum,
@@ -336,6 +355,10 @@ enum SettingsStore {
         }
         if let dt = saved.gestureDragThreshold {
             mouse.gestureDragThreshold = dt
+        }
+        if let actions = saved.gestureActions {
+            mouse.gestureActions = actions
+            applied += actions.count
         }
 
         // Smooth scroll settings (applied to ScrollInterceptor, no HID++ write needed)

@@ -5,6 +5,14 @@ import Foundation
 @Suite("GestureEngine")
 struct GestureEngineTests {
 
+    @Test func defaultActionsRemainCompatible() {
+        #expect(GestureEngine.defaultAction(for: .click) == .missionControl)
+        #expect(GestureEngine.defaultAction(for: .dragLeft) == .nextDesktop)
+        #expect(GestureEngine.defaultAction(for: .dragRight) == .previousDesktop)
+        #expect(GestureEngine.defaultAction(for: .dragUp) == .missionControl)
+        #expect(GestureEngine.defaultAction(for: .dragDown) == .appExpose)
+    }
+
     /// Helper: create a GestureEngine with spy callbacks and a short click time for fast tests.
     private func makeEngine(
         clickTimeLimit: TimeInterval = 0.01,

@@ -23,7 +23,25 @@ import os
 ///     PENDING → elapsed > clickTimeLimit AND axis threshold met → GESTURE
 ///     PENDING → release with no threshold met → CLICK
 ///     GESTURE → release → IDLE
+enum GestureDirection: String, Hashable, Sendable {
+    case click
+    case dragLeft
+    case dragRight
+    case dragUp
+    case dragDown
+}
+
 final class GestureEngine: @unchecked Sendable {
+
+    /// Default mappings used when a direction has not been customized.
+    static func defaultAction(for direction: GestureDirection) -> ButtonAction {
+        switch direction {
+        case .click, .dragUp: return .missionControl
+        case .dragLeft: return .nextDesktop
+        case .dragRight: return .previousDesktop
+        case .dragDown: return .appExpose
+        }
+    }
 
     // MARK: - Configuration (adjustable via UI)
 
@@ -113,7 +131,7 @@ final class GestureEngine: @unchecked Sendable {
                 debugLog("[GestureEngine] Thumb button RELEASED in PENDING (elapsed=\(elapsed) deltaX=\(accumulatedDeltaX))")
 
                 // If we're still in PENDING at release, gesture never fired → always click.
-                debugLog("[GestureEngine] → CLICK → Mission Control")
+                debugLog("[GestureEngine] → CLICK")
                 state = .idle
                 action = onClick
             }
@@ -151,21 +169,21 @@ final class GestureEngine: @unchecked Sendable {
         // Whichever axis exceeds the threshold first wins (prevents diagonal confusion)
         if absDX >= dragThreshold && absDX >= absDY {
             if accumulatedDeltaX < 0 {
-                debugLog("[GestureEngine] DRAG LEFT (dx=\(accumulatedDeltaX)) → Workspace RIGHT")
+                debugLog("[GestureEngine] DRAG LEFT (dx=\(accumulatedDeltaX))")
                 state = .gesture
                 action = onDragLeft
             } else {
-                debugLog("[GestureEngine] DRAG RIGHT (dx=\(accumulatedDeltaX)) → Workspace LEFT")
+                debugLog("[GestureEngine] DRAG RIGHT (dx=\(accumulatedDeltaX))")
                 state = .gesture
                 action = onDragRight
             }
         } else if absDY >= dragThreshold && absDY > absDX {
             if accumulatedDeltaY < 0 {
-                debugLog("[GestureEngine] DRAG UP (dy=\(accumulatedDeltaY)) → Mission Control")
+                debugLog("[GestureEngine] DRAG UP (dy=\(accumulatedDeltaY))")
                 state = .gesture
                 action = onDragUp
             } else {
-                debugLog("[GestureEngine] DRAG DOWN (dy=\(accumulatedDeltaY)) → App Exposé")
+                debugLog("[GestureEngine] DRAG DOWN (dy=\(accumulatedDeltaY))")
                 state = .gesture
                 action = onDragDown
             }

@@ -476,7 +476,7 @@ struct MouseDetailView: View {
                         }
                     }
 
-                    // Gesture thresholds
+                    // Gesture actions and thresholds
                     if mouse.gestureEngine != nil {
                         Text("手势按钮")
                             .font(.system(size: 10, weight: .semibold))
@@ -496,6 +496,12 @@ struct MouseDetailView: View {
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                         }
+
+                        gestureActionPicker(direction: .click, name: "点击")
+                        gestureActionPicker(direction: .dragLeft, name: "向左拖动")
+                        gestureActionPicker(direction: .dragRight, name: "向右拖动")
+                        gestureActionPicker(direction: .dragUp, name: "向上拖动")
+                        gestureActionPicker(direction: .dragDown, name: "向下拖动")
 
                         SliderRow(
                             label: "点击时限",
@@ -523,6 +529,19 @@ struct MouseDetailView: View {
             }
         }
         .padding(.vertical, 6)
+    }
+
+    private func gestureActionPicker(direction: GestureDirection, name: String) -> some View {
+        ActionPicker(
+            buttonName: name,
+            currentAction: Binding(
+                get: { mouse.gestureAction(for: direction) },
+                set: { mouse.setGestureAction($0, for: direction) }
+            ),
+            actions: ButtonAction.gestureActions
+        ) { _ in
+            save()
+        }
     }
 
     // MARK: - Scroll Direction
@@ -616,7 +635,6 @@ struct MouseDetailView: View {
         if mouse.buttons.contains(where: { $0.controlId == controlId && $0.isDivertable }) {
             ActionPicker(
                 buttonName: name,
-                controlId: controlId,
                 currentAction: Binding(
                     get: { mouse.sideButtonAction(for: controlId) },
                     set: { mouse.setSideButtonAction($0, for: controlId) }

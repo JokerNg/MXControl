@@ -36,7 +36,14 @@ struct SettingsStoreTests {
             thumbWheelInverted: true,
             buttonRemaps: [82: 86, 83: 82],
             gestureClickTimeLimit: 0.25,
-            gestureDragThreshold: 200
+            gestureDragThreshold: 200,
+            gestureActions: [
+                .click: .showDesktop,
+                .dragLeft: .previousDesktop,
+                .dragRight: .nextDesktop,
+                .dragUp: .copy,
+                .dragDown: .doNothing,
+            ]
         )
 
         SettingsStore.saveMouseSettings(settings, deviceName: name)
@@ -54,6 +61,9 @@ struct SettingsStoreTests {
         #expect(loaded.buttonRemaps?[83] == 82)
         #expect(loaded.gestureClickTimeLimit == 0.25)
         #expect(loaded.gestureDragThreshold == 200)
+        #expect(loaded.gestureActions?[.click] == .showDesktop)
+        #expect(loaded.gestureActions?[.dragLeft] == .previousDesktop)
+        #expect(loaded.gestureActions?[.dragDown] == .doNothing)
     }
 
     @Test func mouseSettingsPartialSave() {
@@ -112,6 +122,23 @@ struct SettingsStoreTests {
 
         SettingsStore.saveMouseSettings(.init(sideButtonActions: [:]), deviceName: name)
         #expect(SettingsStore.loadMouseSettings(deviceName: name).sideButtonActions?.isEmpty == true)
+    }
+
+    @Test func gestureActionsRoundTripAndClear() {
+        let name = uniqueDeviceName()
+        defer { cleanup(deviceName: name) }
+
+        SettingsStore.saveMouseSettings(
+            .init(gestureActions: [.click: .showDesktop, .dragDown: .doNothing]),
+            deviceName: name
+        )
+
+        let loaded = SettingsStore.loadMouseSettings(deviceName: name)
+        #expect(loaded.gestureActions?[.click] == .showDesktop)
+        #expect(loaded.gestureActions?[.dragDown] == .doNothing)
+
+        SettingsStore.saveMouseSettings(.init(gestureActions: [:]), deviceName: name)
+        #expect(SettingsStore.loadMouseSettings(deviceName: name).gestureActions?.isEmpty == true)
     }
 
     // MARK: - Button Remap Filtering

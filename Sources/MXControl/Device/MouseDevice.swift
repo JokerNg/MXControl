@@ -57,6 +57,8 @@ final class MouseDevice: LogiDevice, @unchecked Sendable {
     var buttonRemaps: [UInt16: UInt16] = [:]
     /// Software actions for diverted configurable mouse buttons.
     var sideButtonActions: [UInt16: ButtonAction] = [:]
+    /// Customized actions for thumb-button gestures. Missing entries use the defaults.
+    var gestureActions: [GestureDirection: ButtonAction] = [:]
     /// Last pressed diverted CIDs from SpecialKeys event 0, for press-edge detection.
     private var lastPressedDivertedCIDs: Set<UInt16> = []
 
@@ -494,8 +496,7 @@ final class MouseDevice: LogiDevice, @unchecked Sendable {
             )
 
             // Create the gesture engine and sync current settings
-            let engine = GestureEngine(thumbCID: thumbCID)
-            engine.updateConfig(clickTimeLimit: gestureClickTimeLimit, dragThreshold: gestureDragThreshold)
+            let engine = makeGestureEngine(thumbCID: thumbCID)
             gestureEngine = engine
             logger.info("[MouseDevice] Thumb button diverted (rawXY=\(hasRawXY) persist=\(canPersist)), gesture engine active")
             debugLog("[MouseDevice] Thumb button diverted (rawXY=\(hasRawXY) persist=\(canPersist)), gesture engine active")
@@ -504,6 +505,27 @@ final class MouseDevice: LogiDevice, @unchecked Sendable {
             logger.error("[MouseDevice] Failed to divert thumb button: \(error.localizedDescription)")
             debugLog("[MouseDevice] Failed to divert thumb button: \(error)")
         }
+    }
+
+    private func makeGestureEngine(thumbCID: UInt16) -> GestureEngine {
+        let engine = GestureEngine(thumbCID: thumbCID)
+        engine.updateConfig(clickTimeLimit: gestureClickTimeLimit, dragThreshold: gestureDragThreshold)
+        engine.onClick = { [weak self] in
+            Task { @MainActor [weak self] in self?.performGestureAction(for: .click) }
+        }
+        engine.onDragLeft = { [weak self] in
+            Task { @MainActor [weak self] in self?.performGestureAction(for: .dragLeft) }
+        }
+        engine.onDragRight = { [weak self] in
+            Task { @MainActor [weak self] in self?.performGestureAction(for: .dragRight) }
+        }
+        engine.onDragUp = { [weak self] in
+            Task { @MainActor [weak self] in self?.performGestureAction(for: .dragUp) }
+        }
+        engine.onDragDown = { [weak self] in
+            Task { @MainActor [weak self] in self?.performGestureAction(for: .dragDown) }
+        }
+        return engine
     }
 
     /// Divert Middle/Back/Forward so they can execute global software actions.
@@ -799,6 +821,19 @@ final class MouseDevice: LogiDevice, @unchecked Sendable {
         }
     }
 
+    func gestureAction(for direction: GestureDirection) -> ButtonAction {
+        gestureActions[direction] ?? .defaultAction
+    }
+
+    func setGestureAction(_ action: ButtonAction, for direction: GestureDirection) {
+        guard ButtonAction.gestureActions.contains(action) else { return }
+        if action == .defaultAction {
+            gestureActions.removeValue(forKey: direction)
+        } else {
+            gestureActions[direction] = action
+        }
+    }
+
     private func defaultSideButtonAction(for controlId: UInt16) -> ButtonAction {
         switch SpecialKeysFeature.KnownCID(rawValue: controlId) {
         case .middleButton: return .middleClick
@@ -809,7 +844,20 @@ final class MouseDevice: LogiDevice, @unchecked Sendable {
     }
 
     private func performSideButtonAction(for controlId: UInt16) {
-        switch sideButtonAction(for: controlId) {
+        performAction(sideButtonAction(for: controlId))
+    }
+
+    private func performGestureAction(for direction: GestureDirection) {
+        let configured = gestureAction(for: direction)
+        performAction(
+            configured == .defaultAction
+                ? GestureEngine.defaultAction(for: direction)
+                : configured
+        )
+    }
+
+    private func performAction(_ action: ButtonAction) {
+        switch action {
         case .defaultAction:
             break
         case .back:
@@ -897,9 +945,7 @@ final class MouseDevice: LogiDevice, @unchecked Sendable {
 
             // Ensure gesture engine exists (should already from initial load)
             if gestureEngine == nil {
-                let engine = GestureEngine(thumbCID: thumbCID)
-                engine.updateConfig(clickTimeLimit: gestureClickTimeLimit, dragThreshold: gestureDragThreshold)
-                gestureEngine = engine
+                gestureEngine = makeGestureEngine(thumbCID: thumbCID)
                 debugLog("[MouseDevice] rearmThumbDivert: created new gesture engine")
             }
             return true

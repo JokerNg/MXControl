@@ -161,6 +161,12 @@ Easy-Switch 在当前版本中只展示主机信息，不提供切换按钮。
 - Xcode Command Line Tools
 - Logitech HID++ 2.0 兼容设备
 
+通过 Homebrew 安装已发布版本：
+
+```bash
+brew install --cask JokerNg/tap/mxcontrol
+```
+
 首次构建前安装并检查工具：
 
 ```bash
@@ -398,6 +404,12 @@ Requirements:
 - macOS 15.0 or later
 - Xcode Command Line Tools
 - Logitech HID++ 2.0 compatible device
+
+Install a released version with Homebrew:
+
+```bash
+brew install --cask JokerNg/tap/mxcontrol
+```
 
 Install and check the required tools before the first build:
 

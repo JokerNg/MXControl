@@ -67,12 +67,8 @@ struct MenuBarView: View {
         return deviceManager.standaloneBLEDevices.first { $0.peripheralId == id }
     }
 
-    private var showsDetailActions: Bool {
-        activeDevice != nil || activeBLEDevice != nil
-    }
-
     private var footerActionTitle: String {
-        showsDetailActions ? "刷新" : "重新扫描"
+        activeDevice != nil ? "刷新" : "重新扫描"
     }
 
     /// Header icon provided by macOS.
@@ -92,6 +88,7 @@ struct MenuBarView: View {
             navFooter
         }
         .frame(width: 320)
+        .fixedSize(horizontal: false, vertical: true)
         .animation(.easeInOut(duration: 0.15), value: destination)
         .onAppear {
             launchAtLogin = SMAppService.mainApp.status == .enabled
@@ -141,9 +138,13 @@ struct MenuBarView: View {
     @ViewBuilder
     private var navContent: some View {
         if let device = activeDevice {
-            DeviceDetailView(device: device, bleInfo: deviceManager.bleInfo(for: device))
+            ScrollView {
+                DeviceDetailView(device: device, bleInfo: deviceManager.bleInfo(for: device))
+            }
+            .frame(height: 420)
+            .id(device.id)
         } else if let bleDevice = activeBLEDevice {
-            BLEDeviceDetailView(info: bleDevice)
+            BLEDeviceDetailView(info: bleDevice, needsInputMonitoring: deviceManager.needsInputMonitoring)
         } else if destination == .general {
             GeneralSettingsView(
                 launchAtLogin: $launchAtLogin,
@@ -161,7 +162,7 @@ struct MenuBarView: View {
         if deviceManager.devices.isEmpty && deviceManager.standaloneBLEDevices.isEmpty {
             // Empty state — context-aware guidance
             VStack(spacing: 8) {
-                if deviceManager.statusMessage.contains("Input Monitoring") {
+                if deviceManager.needsInputMonitoring {
                     // TCC: Input Monitoring not granted
                     Image(systemName: "lock.shield")
                         .font(.system(size: 26))
@@ -175,17 +176,7 @@ struct MenuBarView: View {
                         .foregroundStyle(.tertiary)
                         .multilineTextAlignment(.center)
 
-                    Button {
-                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent") {
-                            NSWorkspace.shared.open(url)
-                        }
-                    } label: {
-                        Text("打开系统设置")
-                            .font(.system(size: 11))
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .padding(.top, 4)
+                    InputMonitoringSettingsButton()
 
                     retryButton
 
@@ -292,9 +283,6 @@ struct MenuBarView: View {
                             await keyboard.refreshBattery()
                         }
                     }
-                } else if activeBLEDevice != nil {
-                    // BLE device: no HID++ refresh available, just a no-op.
-                    // Battery updates come via GATT notify subscription automatically.
                 } else {
                     rescanDevices()
                 }
@@ -614,6 +602,7 @@ struct BLEDeviceRowView: View {
 
 struct BLEDeviceDetailView: View {
     let info: BLEDeviceInfo
+    let needsInputMonitoring: Bool
 
     var body: some View {
         VStack(spacing: 12) {
@@ -654,10 +643,15 @@ struct BLEDeviceDetailView: View {
                         Image(systemName: "info.circle")
                             .font(.system(size: 11))
                             .foregroundStyle(.orange)
-                        Text("连接 USB Bolt 接收器可使用完整控制功能（DPI、SmartShift、背光等）")
+                        Text(needsInputMonitoring
+                             ? "在系统设置中为当前运行的 MXControl 开启「输入监控」，然后退出并重新打开应用，即可重新检测 DPI 等设置。"
+                             : "暂时无法打开设备控制接口。可重新扫描，或连接设备支持的 USB 接收器以使用 DPI、SmartShift 等设置。")
                             .font(.system(size: 11))
                             .foregroundStyle(.tertiary)
                             .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if needsInputMonitoring {
+                        InputMonitoringSettingsButton()
                     }
                 }
                 .padding(.horizontal, 12)
@@ -665,6 +659,20 @@ struct BLEDeviceDetailView: View {
         .padding(.vertical, 10)
     }
 
+}
+
+private struct InputMonitoringSettingsButton: View {
+    var body: some View {
+        Button("打开系统设置") {
+            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent") {
+                NSWorkspace.shared.open(url)
+            }
+        }
+        .font(.system(size: 11))
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .padding(.top, 4)
+    }
 }
 
 struct BLEDeviceInfoRows: View {

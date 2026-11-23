@@ -1,4 +1,5 @@
 import CoreBluetooth
+import CoreGraphics
 import Foundation
 import IOKit.hid
 import Observation
@@ -26,6 +27,7 @@ final class DeviceManager {
 
     var devices: [LogiDevice] = []
     var isScanning: Bool = false
+    private(set) var needsInputMonitoring = false
     var statusMessage: String = "Idle"
 
     // MARK: - Private
@@ -112,6 +114,7 @@ final class DeviceManager {
         logger.info("[DeviceManager] Starting discovery (USB + BLE via IOKit)...")
         statusMessage = "Starting discovery..."
         isScanning = true
+        needsInputMonitoring = !CGPreflightListenEventAccess()
 
         let t = USBTransport()
         self.transport = t
@@ -170,6 +173,7 @@ final class DeviceManager {
                 logger.info("[DeviceManager] IOHIDManager opened, scanning for Logitech devices (USB + BLE)...")
             } catch HIDPPError.tccDenied {
                 logger.error("[DeviceManager] TCC denied — Input Monitoring permission not granted")
+                self.needsInputMonitoring = true
                 self.transport = nil
                 self.isScanning = false
                 self.statusMessage = "Input Monitoring permission required"

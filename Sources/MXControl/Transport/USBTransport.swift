@@ -232,11 +232,10 @@ final class USBTransport: HIDTransport, @unchecked Sendable {
 
         let result = IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeNone))
         if result != kIOReturnSuccess {
-            // kIOReturnExclusiveAccess (0xE00002E2) — common on macOS 15+ for BLE HID devices.
             // The manager callbacks (matching, removal, input reports) still fire even when
-            // IOHIDManagerOpen fails with this code, so we can continue.
-            if result == IOReturn(bitPattern: 0xE000_02E2) {
-                debugLog("[USBTransport] IOHIDManagerOpen returned kIOReturnExclusiveAccess — continuing with callbacks only")
+            // access to an individual matched HID device is denied.
+            if result == kIOReturnExclusiveAccess || result == kIOReturnNotPermitted {
+                debugLog("[USBTransport] IOHIDManagerOpen returned 0x\(String(format: "%08X", result)) — continuing with callbacks")
                 return
             }
 
@@ -249,8 +248,7 @@ final class USBTransport: HIDTransport, @unchecked Sendable {
             IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone))
             self.manager = nil
 
-            // kIOReturnNotPermitted = 0xE00002C1 — TCC denied (Input Monitoring not granted)
-            if result == IOReturn(bitPattern: 0xE000_02C1) {
+            if result == kIOReturnNotPrivileged {
                 throw HIDPPError.tccDenied
             }
             throw HIDPPError.transportError(String(format: "IOHIDManagerOpen failed: 0x%08X", result))
@@ -334,19 +332,17 @@ final class USBTransport: HIDTransport, @unchecked Sendable {
         softwareId: UInt8,
         params: [UInt8]
     ) async throws -> HIDPPResponse {
-        let device = try stateQueue.sync { () throws -> IOHIDDevice in
-            if let uid = targetDeviceUID, let dev = openDevices[uid] {
-                return dev
+        let (device, isBLE) = try stateQueue.sync { () throws -> (IOHIDDevice, Bool) in
+            if let uid = targetDeviceUID {
+                guard let device = openDevices[uid] else { throw HIDPPError.transportNotOpen }
+                return (device, deviceInfoMap[uid]?.transport == .ble)
             }
             // Fallback: use first available device
             guard let dev = openDevices.values.first else {
                 throw HIDPPError.transportNotOpen
             }
-            return dev
+            return (dev, false)
         }
-
-        // Check if target is a BLE device — BLE only supports ReportID 0x11 (long, 20 bytes)
-        let isBLE = stateQueue.sync { deviceInfoMap[targetDeviceUID ?? ""]?.transport == .ble }
 
         let bytes: [UInt8]
         let reportId: ReportID
@@ -421,17 +417,29 @@ final class USBTransport: HIDTransport, @unchecked Sendable {
 
                 // Send the report
                 let data = Data(bytes)
-                let result = data.withUnsafeBytes { rawBuf -> IOReturn in
-                    guard let ptr = rawBuf.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
-                        return kIOReturnBadArgument
+                let setReport = {
+                    data.withUnsafeBytes { rawBuf -> IOReturn in
+                        guard let ptr = rawBuf.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
+                            return kIOReturnBadArgument
+                        }
+                        return IOHIDDeviceSetReport(
+                            device,
+                            kIOHIDReportTypeOutput,
+                            CFIndex(reportId.rawValue),
+                            ptr,
+                            data.count
+                        )
                     }
-                    return IOHIDDeviceSetReport(
-                        device,
-                        kIOHIDReportTypeOutput,
-                        CFIndex(reportId.rawValue),
-                        ptr,
-                        data.count
-                    )
+                }
+                var result = setReport()
+                if result == kIOReturnNotOpen, isBLE, let uid = targetDeviceUID, !Task.isCancelled {
+                    result = stateQueue.sync {
+                        guard openDevices[uid] === device else { return kIOReturnNotOpen }
+                        return IOHIDDeviceOpen(device, IOOptionBits(kIOHIDOptionsTypeNone))
+                    }
+                    if result == kIOReturnSuccess, !Task.isCancelled {
+                        result = setReport()
+                    }
                 }
 
                 if result != kIOReturnSuccess {
@@ -445,10 +453,14 @@ final class USBTransport: HIDTransport, @unchecked Sendable {
                     }
 
                     if removed {
-                        debugLog("[USBTransport] SetReport failed: 0x\(String(format: "%08X", result)) for uid=\(targetDeviceUID ?? "any")")
+                        logger.warning("[USBTransport] HID report write or reopen failed: 0x\(String(format: "%08X", result), privacy: .public)")
                         let error: HIDPPError
-                        if result == IOReturn(bitPattern: 0xE000_02CD) || result == IOReturn(bitPattern: 0xE000_02E2) {
+                        if result == kIOReturnNotOpen {
+                            error = .transportNotOpen
+                        } else if result == kIOReturnExclusiveAccess {
                             error = .exclusiveAccess
+                        } else if result == kIOReturnNotPermitted || result == kIOReturnNotPrivileged {
+                            error = .tccDenied
                         } else {
                             error = .transportError(String(format: "IOHIDDeviceSetReport failed: 0x%08X", result))
                         }
@@ -582,7 +594,7 @@ final class USBTransport: HIDTransport, @unchecked Sendable {
                 // BLE: register for receive-only and start background retry
                 registerPendingBLEDevice(device, uid: uid, info: info, openResult: openResult)
             } else {
-                if openResult == IOReturn(bitPattern: 0xE000_02CD) {
+                if openResult == kIOReturnNotOpen {
                     debugLog("[USBTransport] IOHIDDeviceOpen not ready for uid=\(uid)")
                 } else {
                     debugLog("[USBTransport] IOHIDDeviceOpen failed: 0x\(String(format: "%08X", openResult)) uid=\(uid)")
@@ -846,9 +858,13 @@ final class USBTransport: HIDTransport, @unchecked Sendable {
         let devicePtr = unsafeBitCast(device, to: Int.self)
 
         let errorName: String
-        if openResult == IOReturn(bitPattern: 0xE000_02E2) {
+        if openResult == kIOReturnExclusiveAccess {
             errorName = "kIOReturnExclusiveAccess"
-        } else if openResult == IOReturn(bitPattern: 0xE000_02CD) {
+        } else if openResult == kIOReturnNotPermitted {
+            errorName = "kIOReturnNotPermitted"
+        } else if openResult == kIOReturnNotPrivileged {
+            errorName = "kIOReturnNotPrivileged"
+        } else if openResult == kIOReturnNotOpen {
             errorName = "kIOReturnNotOpen"
         } else {
             errorName = String(format: "0x%08X", openResult)
